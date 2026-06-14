@@ -1,0 +1,21 @@
+# org-hud — PUBLIC overlay client. Members install this.
+# Depends ONLY on the public `hud-protocol` wire contract (added in Step 5 when the overlay
+# is built). Today this is a docs-and-CI skeleton with a trivial binary so CI has something
+# to lint and build.
+[package]
+name = "org-hud"
+version = "0.0.1"
+edition = "2021"
+rust-version = "1.90"
+license = "MIT"
+description = "Non-invasive in-game overlay (Org HUD) for our Star Citizen org."
+repository = "https://github.com/TheCodeSaiyan/org-hud"
+
+# Step 5 adds: winit, wgpu, egui, tokio-tungstenite, reqwest, and
+#   hud-protocol = { git = "https://github.com/TheCodeSaiyan/orgplatform", package = "hud-protocol" }
+# (or a vendored/mirrored copy) — the ONLY orgplatform dependency permitted here.
+[dependencies]
+
+[profile.release]
+lto = "thin"
+strip = true
