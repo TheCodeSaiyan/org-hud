@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Org HUD",
+  "version": "0.1.0",
+  "identifier": "com.thecodesaiyan.orghud",
+  "build": {
+    "frontendDist": "./ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost ws: wss: http: https:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi", "app", "appimage", "dmg"],
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "shortDescription": "orgplatform desktop HUD",
+    "longDescription": "A transparent, always-on-top in-game overlay for the org platform: the live public identity card plus an opt-in member panel."
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/TheCodeSaiyan/org-hud/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVFMkQzMERCNUE0M0I3NTgKUldSWXQwTmEyekF0WHNhUEZlQnBPMXpSY1pBUUpFSkJZMC9DTUxsa1hVL3pNYjZrRmJkUjN2aXcK"
+    }
+  }
+}

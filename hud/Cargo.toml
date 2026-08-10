@@ -1,0 +1,58 @@
+# orgplatform desktop HUD — the in-game overlay app.
+#
+# INVARIANT (workspace rule): this crate depends ONLY on hud-protocol from the workspace; it never
+# touches `core` or `server`. It talks to the server purely over HTTP/WebSocket, so it stays
+# extraction-ready into its own public repo.
+[package]
+name = "hud"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "orgplatform desktop HUD — a transparent, always-on-top in-game overlay."
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2.6", features = [] }
+
+[dependencies]
+hud-protocol = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tauri = { version = "2.11", features = ["tray-icon"] }
+# Start-on-login (registry Run key / LaunchAgent / .desktop autostart).
+tauri-plugin-autostart = "2.5"
+# Signed auto-update: checks the configured endpoint on launch + installs newer signed releases.
+tauri-plugin-updater = "2.10"
+# Authed pulls from the server's bearer-token REST API.
+reqwest = { version = "0.13", features = ["json"] }
+# OS-native secret store for the desktop bearer token (Credential Manager / Keychain / libsecret).
+# Pinned to 3.x for the simple Entry API; 4.0 reorganised into keyring-core + registered backends.
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+# Authenticated live-op channel: Rust owns the /ws/member socket so the bearer token never
+# enters the webview (it rides on an Authorization header set here).
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+futures-util = "0.3"
+# Open external links (the op "Details" button) in the system browser.
+tauri-plugin-opener = "2"
+discord-rich-presence = "1.1.0"
+# Local control API (C10): pairing-token generation. v4 is CSPRNG-backed via getrandom.
+uuid = { workspace = true }
+
+# Foreground-window detection for the "auto-hide unless Star Citizen is focused" behaviour.
+[target.'cfg(windows)'.dependencies]
+# SMTC (roadmap C11): media keys drive the op's bed. Needs COM/WinRT, which `windows-sys` (raw
+# FFI) has no support for. NOT a new subtree: `windows` 0.61 is already in the graph — tauri, tao,
+# wry and webview2-com all pull it — so this enables features on a crate that already compiles.
+windows = { version = "0.61", features = [
+    "Foundation",
+    "Media",
+    "Win32_Foundation",
+    "Win32_System_WinRT",
+] }
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_System_LibraryLoader",
+] }

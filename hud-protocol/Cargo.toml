@@ -1,0 +1,16 @@
+# hud-protocol — SHARED, PUBLISHABLE wire contract.
+# The public `org-hud` repo depends on THIS crate and nothing else from orgplatform.
+# RULE: no secrets, no DB, no domain logic, no I/O framework deps. DTOs and message enums only.
+[package]
+name = "hud-protocol"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT OR Apache-2.0"  # permissive on purpose: this crate is published for the public client
+description = "Wire types (DTOs + websocket message enums) shared between the orgplatform server and the public org-hud overlay client."
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }

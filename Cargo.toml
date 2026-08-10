@@ -1,20 +1,38 @@
 # org-hud — PUBLIC overlay client. Members install this.
-# Depends ONLY on the public `hud-protocol` wire contract (added in Step 5 when the overlay
-# is built). Today this is a docs-and-CI skeleton with a trivial binary so CI has something
-# to lint and build.
-[package]
-name = "org-hud"
-version = "0.0.1"
+#
+# Step 5 of the platform plan: the docs-and-CI skeleton is now a real workspace holding the Tauri
+# desktop overlay (`hud`) and the wire contract it speaks (`hud-protocol`).
+#
+# `hud-protocol` is vendored here as a workspace member rather than pulled from orgplatform: that
+# repo is PRIVATE, so a git dependency on it would make this workspace unbuildable for anyone
+# without access — which defeats the point of a public client. It is the ONLY part of the platform
+# permitted to live here, and it carries no secrets, no credentials and no org-internal rules (see
+# the invariants in `hud-protocol/src/lib.rs`).
+#
+# KEEP IN STEP WITH orgplatform: `hud-protocol` is a copy, so a `PROTOCOL_VERSION` bump or any wire
+# change must land in both. The version is advisory — no peer refuses on mismatch — so drift is
+# silent and only shows up as a field the other side ignores.
+[workspace]
+resolver = "2"
+members = ["hud", "hud-protocol"]
+
+[workspace.package]
 edition = "2021"
 rust-version = "1.90"
+# MIT only — matches the LICENSE file at the repo root. (The extraction template in orgplatform's
+# `scripts/extract-hud.ps1` emits "MIT OR Apache-2.0"; that is wrong for this repo and would
+# misdeclare the licence in published crate metadata.)
 license = "MIT"
-description = "Non-invasive in-game overlay (Org HUD) for our Star Citizen org."
+authors = ["TheCodeSaiyan"]
 repository = "https://github.com/TheCodeSaiyan/org-hud"
 
-# Step 5 adds: winit, wgpu, egui, tokio-tungstenite, reqwest, and
-#   hud-protocol = { git = "https://github.com/TheCodeSaiyan/orgplatform", package = "hud-protocol" }
-# (or a vendored/mirrored copy) — the ONLY orgplatform dependency permitted here.
-[dependencies]
+[workspace.dependencies]
+hud-protocol = { path = "hud-protocol" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.23", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+tokio = { version = "1.52", features = ["full"] }
 
 [profile.release]
 lto = "thin"

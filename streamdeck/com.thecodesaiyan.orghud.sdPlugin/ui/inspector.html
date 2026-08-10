@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Org HUD</title>
+<style>
+  body { font: 13px/1.5 -apple-system, "Segoe UI", sans-serif; color: #d8d8d8; background: #2d2d2d; margin: 0; padding: 12px; }
+  label { display: block; margin: 10px 0 3px; color: #9a9a9a; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  input, select { width: 100%; box-sizing: border-box; background: #3d3d3d; border: 1px solid #4a4a4a; color: #e8e8e8; border-radius: 4px; padding: 6px 8px; font: inherit; }
+  .hint { color: #8a8a8a; font-size: 11px; margin-top: 6px; }
+  .status { margin-top: 12px; padding: 8px; border-radius: 4px; font-size: 12px; }
+  .ok { background: #1e3a24; color: #9fd3a8; }
+  .bad { background: #3a1e1e; color: #d39f9f; }
+  hr { border: 0; border-top: 1px solid #3d3d3d; margin: 14px 0; }
+</style>
+</head>
+<body>
+
+<div id="quickwrap" hidden>
+  <label for="quick">Call</label>
+  <select id="quick"><option value="">— pick a call —</option></select>
+  <div class="hint">Posted into your op's ready room, attributed to you. Available to any member on the op, not just the lead.</div>
+  <hr>
+</div>
+
+<div id="mclipwrap" hidden>
+  <label for="mclip">Member clip</label>
+  <select id="mclip"><option value="">— pick a clip —</option></select>
+  <div class="hint">Plays into the ready room. Subject to the lead's clip policy — if they switch clips off, the key greys.</div>
+  <hr>
+</div>
+
+<div id="clipwrap" hidden>
+  <label for="clip">Soundboard clip</label>
+  <select id="clip"><option value="">— pick a clip —</option></select>
+  <div id="status" class="status bad">Not connected to the HUD.</div>
+  <div class="hint">Populated from the clips you may actually fire, so a stale key can't name an asset you have no access to. Needs a live op with the HUD connected.</div>
+  <hr>
+</div>
+
+<label for="key">Pairing key</label>
+<input type="password" id="key" placeholder="paste from HUD → Settings" spellcheck="false">
+<div class="hint">
+  From the Org HUD desktop app: <b>Settings → Local control API</b>. It grants access to the HUD on
+  this machine only — never to your org account, and every action is still checked by the server.
+  You can revoke it from the same place at any time.
+</div>
+
+<label for="port">HUD port</label>
+<input type="number" id="port" value="48291" min="1" max="65535">
+<div class="hint">Only change this if you changed it in the HUD.</div>
+
+
+
+<script>
+let ws = null, uuid = null, actionInfo = null, globals = {};
+
+function connectElgatoStreamDeckSocket(port, propertyInspectorUUID, registerEvent, info, inActionInfo) {
+  uuid = propertyInspectorUUID;
+  actionInfo = JSON.parse(inActionInfo);
+  ws = new WebSocket('ws://127.0.0.1:' + port);
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ event: registerEvent, uuid }));
+    ws.send(JSON.stringify({ event: 'getGlobalSettings', context: uuid }));
+    // Only the clip action needs a picker.
+    // Each picker-bearing action reveals its own row and asks the plugin for the live options, so
+    // a key can only ever be bound to something the server actually offered this member.
+    const PICKERS = {
+      'com.thecodesaiyan.orghud.clip': ['clipwrap', 'clip'],
+      'com.thecodesaiyan.orghud.quickaction': ['quickwrap', 'quick'],
+      'com.thecodesaiyan.orghud.memberclip': ['mclipwrap', 'mclip'],
+    };
+    const picker = PICKERS[actionInfo.action];
+    if (picker) {
+      document.getElementById(picker[0]).hidden = false;
+      const st = (actionInfo.payload && actionInfo.payload.settings) || {};
+      pending[picker[1]] = st[picker[1]];  // picker[1] IS the settings key
+      ws.send(JSON.stringify({ event: 'sendToPlugin', context: uuid, action: actionInfo.action, payload: { get: 'options' } }));
+    }
+  };
+  ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.event === 'didReceiveGlobalSettings') {
+      globals = (msg.payload && msg.payload.settings) || {};
+      document.getElementById('key').value = globals.pairingKey || '';
+      document.getElementById('port').value = globals.hudPort || 48291;
+    }
+    if (msg.event === 'sendToPropertyInspector') {
+      const p = msg.payload || {};
+      // `clips` is a flat key list; the member boards are [key, label] pairs.
+      fill('clip', (p.clips || []).map(k => [k, k]));
+      fill('quick', p.quickActions || []);
+      fill('mclip', p.memberClips || []);
+      setStatus(!!p.connected);
+    }
+  };
+}
+
+const pending = {};
+
+/** Populate one picker from `[key, label]` pairs, restoring any previously-saved choice. */
+function fill(id, pairs) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  const first = sel.options[0] ? sel.options[0].outerHTML : '';
+  sel.innerHTML = first;
+  for (const [key, label] of pairs) {
+    const o = document.createElement('option');
+    o.value = key; o.textContent = label || key;
+    sel.appendChild(o);
+  }
+  if (pending[id]) sel.value = pending[id];
+}
+
+function setStatus(connected) {
+  const el = document.getElementById('status');
+  el.className = 'status ' + (connected ? 'ok' : 'bad');
+  el.textContent = connected ? 'Connected to the HUD.' : 'Not connected to the HUD — check the pairing key, and that the HUD is running with the local API enabled.';
+}
+
+function saveGlobals() {
+  globals.pairingKey = document.getElementById('key').value.trim();
+  globals.hudPort = Number(document.getElementById('port').value) || 48291;
+  ws.send(JSON.stringify({ event: 'setGlobalSettings', context: uuid, payload: globals }));
+}
+
+document.getElementById('key').addEventListener('change', saveGlobals);
+document.getElementById('port').addEventListener('change', saveGlobals);
+for (const id of ['clip', 'quick', 'mclip']) {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', () => {
+    ws.send(JSON.stringify({ event: 'setSettings', context: uuid, payload: { [id]: el.value } }));
+  });
+}
+</script>
+</body>
+</html>
