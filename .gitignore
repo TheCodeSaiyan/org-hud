@@ -13,11 +13,11 @@ Thumbs.db
 # Tauri updater SIGNING KEYS — private key material, never committed.
 #
 # `docs/HUD-RELEASE.md` (starplatform) has the operator run
-#   cargo tauri signer generate -w org-hud.key
+#   cargo tauri signer generate -w starplatform-hud.key
 # which writes the PRIVATE key as an untracked file. In a PUBLIC repo a committed signing key is
 # not merely leaked, it is world-readable the moment it is pushed — and key material cannot be
 # removed from history by a later commit, only rotated.
 #
 # The PUBLIC key is not secret: it is committed deliberately, in hud/tauri.conf.json.
-org-hud.key
+starplatform-hud.key
 *.key

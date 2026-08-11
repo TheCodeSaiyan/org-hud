@@ -26,8 +26,8 @@ directly to the server would be a second credential sitting in a user-readable N
    default because it opens a listening socket, and it is read once at startup — a security-relevant
    listener appearing mid-session on a settings save would be a surprising thing to happen.)
 2. Copy the **pairing key** shown there.
-3. **Install the plugin** — double-click `com.thecodesaiyan.orghud.streamDeckPlugin`, or for
-   development: `streamdeck link streamdeck/com.thecodesaiyan.orghud.sdPlugin`
+3. **Install the plugin** — double-click `com.thecodesaiyan.starplatformhud.streamDeckPlugin`, or for
+   development: `streamdeck link streamdeck/com.thecodesaiyan.starplatformhud.sdPlugin`
 4. Drag any Org HUD action onto a key, open its property inspector, and paste the pairing key. It is
    stored once globally, so you only do this for the first key.
 
@@ -80,7 +80,7 @@ Drift is guarded **from Rust**, in `crates/hud/src/local_api.rs`, because CI run
 action the HUD does not know, if the subprotocol or default port drift apart, if a manifest action
 loses its handler, or if the confirm-on-complete rule is weakened on either side.
 
-Package for distribution with `streamdeck pack com.thecodesaiyan.orghud.sdPlugin`. Marketplace
+Package for distribution with `streamdeck pack com.thecodesaiyan.starplatformhud.sdPlugin`. Marketplace
 publishing is a separate, later decision — Elgato explicitly allows distributing the
 `.streamDeckPlugin` file directly.
 
@@ -99,7 +99,7 @@ Stream Deck completely and relaunch it, or the plugin silently never loads and n
   `NodeJS.13.1
 ode.exe … bin/plugin.js -port … -pluginUUID … -registerEvent registerPlugin`.
   Nothing needs installing by hand.
-- **The registration handshake works** — `[com.thecodesaiyan.orghud] Plugin connected`.
+- **The registration handshake works** — `[com.thecodesaiyan.starplatformhud] Plugin connected`.
 
 ## Still not verified
 

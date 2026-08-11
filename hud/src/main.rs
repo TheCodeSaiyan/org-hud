@@ -29,7 +29,7 @@ mod rich_presence;
 use rich_presence::RichPresence;
 mod smtc;
 
-const KEYRING_SERVICE: &str = "com.thecodesaiyan.orghud";
+const KEYRING_SERVICE: &str = "com.thecodesaiyan.starplatformhud";
 const KEYRING_USER: &str = "desktop-token";
 const WIN_W: f64 = 520.0;
 const WIN_H: f64 = 680.0;

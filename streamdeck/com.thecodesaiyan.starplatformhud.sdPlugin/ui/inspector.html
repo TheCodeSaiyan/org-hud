@@ -66,9 +66,9 @@ function connectElgatoStreamDeckSocket(port, propertyInspectorUUID, registerEven
     // Each picker-bearing action reveals its own row and asks the plugin for the live options, so
     // a key can only ever be bound to something the server actually offered this member.
     const PICKERS = {
-      'com.thecodesaiyan.orghud.clip': ['clipwrap', 'clip'],
-      'com.thecodesaiyan.orghud.quickaction': ['quickwrap', 'quick'],
-      'com.thecodesaiyan.orghud.memberclip': ['mclipwrap', 'mclip'],
+      'com.thecodesaiyan.starplatformhud.clip': ['clipwrap', 'clip'],
+      'com.thecodesaiyan.starplatformhud.quickaction': ['quickwrap', 'quick'],
+      'com.thecodesaiyan.starplatformhud.memberclip': ['mclipwrap', 'mclip'],
     };
     const picker = PICKERS[actionInfo.action];
     if (picker) {

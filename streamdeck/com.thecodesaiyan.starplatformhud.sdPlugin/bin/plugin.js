@@ -41,7 +41,7 @@ const SD_REGISTER = args.registerEvent;
 
 const LAUNCHED_BY_STREAM_DECK = Boolean(SD_PORT && SD_UUID && SD_REGISTER);
 
-const SUBPROTOCOL = 'orghud.v1';
+const SUBPROTOCOL = 'starplatformhud.v1';
 const DEFAULT_HUD_PORT = 48291;
 
 // ---------------------------------------------------------------------------
@@ -54,22 +54,22 @@ const DEFAULT_HUD_PORT = 48291;
  *  (`let _ = apply_*`) and does not re-push context for them, so an `Ack` means "queued", never
  *  "accepted". A tick on these would assert a success nobody verified. */
 const UNCONFIRMED = new Set([
-  'com.thecodesaiyan.orghud.bed.pause',
-  'com.thecodesaiyan.orghud.transport.next',
-  'com.thecodesaiyan.orghud.transport.prev',
-  'com.thecodesaiyan.orghud.clip',
-  'com.thecodesaiyan.orghud.volume',
-  'com.thecodesaiyan.orghud.quickaction',
-  'com.thecodesaiyan.orghud.memberclip',
+  'com.thecodesaiyan.starplatformhud.bed.pause',
+  'com.thecodesaiyan.starplatformhud.transport.next',
+  'com.thecodesaiyan.starplatformhud.transport.prev',
+  'com.thecodesaiyan.starplatformhud.clip',
+  'com.thecodesaiyan.starplatformhud.volume',
+  'com.thecodesaiyan.starplatformhud.quickaction',
+  'com.thecodesaiyan.starplatformhud.memberclip',
 ]);
 
 const ACTIONS = {
-  'com.thecodesaiyan.orghud.checkin': () => ({ action: 'check_in' }),
-  'com.thecodesaiyan.orghud.ready': () => ({ action: 'toggle_ready' }),
-  'com.thecodesaiyan.orghud.objective.next': () => ({ action: 'objective_next' }),
-  'com.thecodesaiyan.orghud.objective.prev': () => ({ action: 'objective_prev' }),
-  'com.thecodesaiyan.orghud.transport.next': () => ({ action: 'transport_next' }),
-  'com.thecodesaiyan.orghud.transport.prev': () => ({ action: 'transport_prev' }),
+  'com.thecodesaiyan.starplatformhud.checkin': () => ({ action: 'check_in' }),
+  'com.thecodesaiyan.starplatformhud.ready': () => ({ action: 'toggle_ready' }),
+  'com.thecodesaiyan.starplatformhud.objective.next': () => ({ action: 'objective_next' }),
+  'com.thecodesaiyan.starplatformhud.objective.prev': () => ({ action: 'objective_prev' }),
+  'com.thecodesaiyan.starplatformhud.transport.next': () => ({ action: 'transport_next' }),
+  'com.thecodesaiyan.starplatformhud.transport.prev': () => ({ action: 'transport_prev' }),
 };
 
 /** Why a key is unavailable, or `null` when it is fine.
@@ -80,25 +80,25 @@ const ACTIONS = {
  */
 function keyReason(uuid, state) {
   if (!state || !state.connected) return 'HUD\noffline';
-  const isCheckIn = uuid === 'com.thecodesaiyan.orghud.checkin';
+  const isCheckIn = uuid === 'com.thecodesaiyan.starplatformhud.checkin';
   if (!state.live_op) return isCheckIn && state.checkin ? null : 'No op';
   if (isCheckIn) return 'On op';           // already checked in: nothing left to do
   // Member-level: any member ON the op, lead or not. This is what makes a deck worth owning if
   // you are not leading — every other action below this line is lead-only.
-  if (uuid === 'com.thecodesaiyan.orghud.ready') return null;
-  if (uuid === 'com.thecodesaiyan.orghud.quickaction') {
+  if (uuid === 'com.thecodesaiyan.starplatformhud.ready') return null;
+  if (uuid === 'com.thecodesaiyan.starplatformhud.quickaction') {
     return (state.quick_actions || []).length ? null : 'No actions';
   }
-  if (uuid === 'com.thecodesaiyan.orghud.memberclip') {
+  if (uuid === 'com.thecodesaiyan.starplatformhud.memberclip') {
     return (state.member_clips || []).length ? null : 'Clips off';
   }
   if (!state.is_lead) return 'Lead only';
-  if (uuid.startsWith('com.thecodesaiyan.orghud.transport')
-      || uuid === 'com.thecodesaiyan.orghud.bed.pause'
-      || uuid === 'com.thecodesaiyan.orghud.volume') {
+  if (uuid.startsWith('com.thecodesaiyan.starplatformhud.transport')
+      || uuid === 'com.thecodesaiyan.starplatformhud.bed.pause'
+      || uuid === 'com.thecodesaiyan.starplatformhud.volume') {
     return state.bed_active ? null : 'No bed';
   }
-  if (uuid.startsWith('com.thecodesaiyan.orghud.objective')) {
+  if (uuid.startsWith('com.thecodesaiyan.starplatformhud.objective')) {
     const o = state.objective;
     if (!o || o[1] === 0) return 'No objectives';
     // At the ends of the rail the key would refuse; grey it rather than let it look live.
@@ -149,13 +149,13 @@ function repaint() {
     const reason = keyReason(uuid, board);
 
     // Two-state keys carry their state regardless of availability, so the face stays truthful.
-    if (uuid === 'com.thecodesaiyan.orghud.ready') {
+    if (uuid === 'com.thecodesaiyan.starplatformhud.ready') {
       setStateFor(context, board && board.my_ready ? 1 : 0);
-    } else if (uuid === 'com.thecodesaiyan.orghud.bed.pause') {
+    } else if (uuid === 'com.thecodesaiyan.starplatformhud.bed.pause') {
       setStateFor(context, board && board.bed_paused ? 1 : 0);
     }
 
-    if (uuid === 'com.thecodesaiyan.orghud.volume') {
+    if (uuid === 'com.thecodesaiyan.starplatformhud.volume') {
       const np = (board && board.now_playing) || (reason || '—');
       const vol = board && typeof board.bed_volume === 'number' ? board.bed_volume + '%' : '';
       sdSend({ event: 'setFeedback', context, payload: { title: vol ? `Bed ${vol}` : 'Bed', value: np } });
@@ -169,7 +169,7 @@ function repaint() {
 /** The one title a key should show right now. `''` means "use the manifest's own title". */
 function titleFor(uuid, reason, state) {
   if (reason) return reason;
-  if (uuid === 'com.thecodesaiyan.orghud.objective.next' || uuid === 'com.thecodesaiyan.orghud.objective.prev') {
+  if (uuid === 'com.thecodesaiyan.starplatformhud.objective.next' || uuid === 'com.thecodesaiyan.starplatformhud.objective.prev') {
     const o = state.objective;
     const arrow = uuid.endsWith('next') ? 'Obj +' : 'Obj -';
     return o ? `${arrow}\n${o[0]}/${o[1]}` : arrow;
@@ -244,7 +244,7 @@ function onKeyDown(msg) {
   const uuid = msg.action;
   const context = msg.context;
 
-  if (uuid === 'com.thecodesaiyan.orghud.complete') {
+  if (uuid === 'com.thecodesaiyan.starplatformhud.complete') {
     // 🔴 Two presses, five seconds. The SDK has no confirmation primitive, and ending an op is
     // irreversible — a single stray press on a deck must not do it. The HUD enforces this too
     // (`confirm: true` is required there), so a buggy or hand-rolled plugin cannot skip it.
@@ -260,28 +260,28 @@ function onKeyDown(msg) {
     return;
   }
 
-  if (uuid === 'com.thecodesaiyan.orghud.quickaction') {
+  if (uuid === 'com.thecodesaiyan.starplatformhud.quickaction') {
     const key = (settings.get(context) || {}).quick;
     if (!key) { sdSend({ event: 'showAlert', context }); return; }
     send({ action: 'quick_action', key }, context);
     return;
   }
 
-  if (uuid === 'com.thecodesaiyan.orghud.memberclip') {
+  if (uuid === 'com.thecodesaiyan.starplatformhud.memberclip') {
     const key = (settings.get(context) || {}).mclip;
     if (!key) { sdSend({ event: 'showAlert', context }); return; }
     send({ action: 'member_clip', key }, context);
     return;
   }
 
-  if (uuid === 'com.thecodesaiyan.orghud.clip') {
+  if (uuid === 'com.thecodesaiyan.starplatformhud.clip') {
     const key = (settings.get(context) || {}).clip;
     if (!key) { sdSend({ event: 'showAlert', context }); return; }
     send({ action: 'trigger_clip', key }, context);
     return;
   }
 
-  if (uuid === 'com.thecodesaiyan.orghud.bed.pause') {
+  if (uuid === 'com.thecodesaiyan.starplatformhud.bed.pause') {
     send({ action: board && board.bed_paused ? 'bed_resume' : 'bed_pause' }, context);
     return;
   }
@@ -292,7 +292,7 @@ function onKeyDown(msg) {
 }
 
 function onDialRotate(msg) {
-  if (keyReason('com.thecodesaiyan.orghud.volume', board)) { sdSend({ event: 'showAlert', context: msg.context }); return; }
+  if (keyReason('com.thecodesaiyan.starplatformhud.volume', board)) { sdSend({ event: 'showAlert', context: msg.context }); return; }
   const ticks = (msg.payload && msg.payload.ticks) || 0;
   // Start from the board's REAL volume rather than a guess, so the first turn nudges from where the
   // bed actually is instead of jumping to wherever a hardcoded default happened to sit. `pending`

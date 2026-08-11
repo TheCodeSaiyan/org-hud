@@ -1,7 +1,7 @@
 //! # hud-protocol
 //!
 //! The wire contract shared between the private `starplatform` server and the public
-//! `org-hud` overlay client. This crate is the ONLY part of the platform the public
+//! `starplatform-hud` overlay client. This crate is the ONLY part of the platform the public
 //! repo is allowed to depend on.
 //!
 //! Invariants (enforced by review, not the compiler):
@@ -91,7 +91,7 @@ use serde::{Deserialize, Serialize};
 ///      therefore INFORMATIONAL — nothing refuses on it — but it is taken anyway because the
 ///      rail's semantic content changed and a version is how that gets communicated.
 ///      Also v17: the server derives default phase spans from a contract's step types (see
-///      `orgcore::kb::phases`), so `OpContext.phases` is now usually populated without a lead
+///      `starcore::kb::phases`), so `OpContext.phases` is now usually populated without a lead
 ///      authoring it. That is a server-side behaviour change with no wire-shape change.
 pub const PROTOCOL_VERSION: u32 = 17;
 
