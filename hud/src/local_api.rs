@@ -104,8 +104,8 @@ fn constant_time_eq(a: &str, b: &str) -> bool {
     a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
-/// The subprotocol a local tool offers: `["orghud.v1", "<token>"]`.
-pub const SUBPROTOCOL: &str = "orghud.v1";
+/// The subprotocol a local tool offers: `["starplatformhud.v1", "<token>"]`.
+pub const SUBPROTOCOL: &str = "starplatformhud.v1";
 
 /// Pull the token out of a `Sec-WebSocket-Protocol` header.
 ///
@@ -614,7 +614,7 @@ async fn handle_conn(app: tauri::AppHandle, stream: tokio::net::TcpStream, servi
                     // RFC 6455 §4.1: the server may only select a subprotocol the client
                     // OFFERED. A native client that authenticates via `Authorization` but happens
                     // to offer some unrelated subprotocol would otherwise be told it selected
-                    // `orghud.v1` — which it never offered — and must then fail the connection,
+                    // `starplatformhud.v1` — which it never offered — and must then fail the connection,
                     // with no diagnostic. Condition on OURS being present, not on any being.
                     if token_from_subprotocol(offered).is_some() {
                         if let Ok(v) = SUBPROTOCOL.parse() {
@@ -888,11 +888,11 @@ mod tests {
     #[test]
     fn a_token_can_arrive_as_a_subprotocol_because_the_browser_api_cannot_set_headers() {
         assert_eq!(
-            token_from_subprotocol(Some("orghud.v1, abc123")),
+            token_from_subprotocol(Some("starplatformhud.v1, abc123")),
             Some("abc123")
         );
         assert_eq!(
-            token_from_subprotocol(Some("orghud.v1,abc123")),
+            token_from_subprotocol(Some("starplatformhud.v1,abc123")),
             Some("abc123")
         );
     }
@@ -902,8 +902,8 @@ mod tests {
         assert_eq!(token_from_subprotocol(None), None);
         assert_eq!(token_from_subprotocol(Some("someone.else, abc")), None);
         // Spoke the protocol but sent no token: a refusal, NOT a token of "".
-        assert_eq!(token_from_subprotocol(Some("orghud.v1")), None);
-        assert_eq!(token_from_subprotocol(Some("orghud.v1, ")), None);
+        assert_eq!(token_from_subprotocol(Some("starplatformhud.v1")), None);
+        assert_eq!(token_from_subprotocol(Some("starplatformhud.v1, ")), None);
     }
 
     // ---- resolve ---------------------------------------------------------
@@ -1222,8 +1222,8 @@ mod tests {
         // A client offering something else entirely must not be told it selected ours — RFC 6455
         // requires it to fail the connection, which would look like an unexplained instant drop.
         assert!(token_from_subprotocol(Some("chat")).is_none());
-        assert!(token_from_subprotocol(Some("chat, orghud.v1")).is_none());
-        assert!(token_from_subprotocol(Some("orghud.v1, tok")).is_some());
+        assert!(token_from_subprotocol(Some("chat, starplatformhud.v1")).is_none());
+        assert!(token_from_subprotocol(Some("starplatformhud.v1, tok")).is_some());
     }
 
     // ---- the Stream Deck plugin (C10 slice 2) ----------------------------
@@ -1232,9 +1232,9 @@ mod tests {
     // build never executes is decoration.
 
     const PLUGIN_JS: &str =
-        include_str!("../../streamdeck/com.thecodesaiyan.orghud.sdPlugin/bin/plugin.js");
+        include_str!("../../streamdeck/com.thecodesaiyan.starplatformhud.sdPlugin/bin/plugin.js");
     const MANIFEST: &str =
-        include_str!("../../streamdeck/com.thecodesaiyan.orghud.sdPlugin/manifest.json");
+        include_str!("../../streamdeck/com.thecodesaiyan.starplatformhud.sdPlugin/manifest.json");
 
     /// Every `action: 'x'` literal the plugin sends.
     fn actions_sent_by_plugin() -> Vec<String> {
@@ -1309,7 +1309,7 @@ mod tests {
             //
             // The encoder is the one legitimate exception: dial events are routed by EVENT TYPE
             // (`dialRotate`/`dialDown`), so its uuid never appears in a comparison at all.
-            const EVENT_ROUTED: &[&str] = &["com.thecodesaiyan.orghud.volume"];
+            const EVENT_ROUTED: &[&str] = &["com.thecodesaiyan.starplatformhud.volume"];
             if EVENT_ROUTED.contains(&u.as_str()) {
                 continue;
             }

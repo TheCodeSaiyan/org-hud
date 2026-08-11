@@ -86,7 +86,7 @@ fn windows_bundles_both_installers_and_nsis_owns_the_updater() {
 ///   2. **The endpoint must not point at a PRIVATE repo.** Release assets on a private repo require
 ///      an authenticated request and the Tauri updater sends none, so such an endpoint 404s
 ///      forever — and a failed update check is not user-visible. `starplatform` is private; the
-///      endpoint must therefore name a public host (today: the `org-hud` repo of Option 3 in
+///      endpoint must therefore name a public host (today: the `starplatform-hud` repo of Option 3 in
 ///      `docs/HUD-RELEASE.md`).
 ///
 /// **This is not a "has the endpoint been created yet" check** — a test cannot know that. It only
@@ -115,6 +115,10 @@ fn updater_signing_and_endpoint_agree() {
         // resolves to the same private repo and 404s for the updater exactly as before. Dropping
         // the old spelling would leave a guard that cannot fail, which reads as coverage while
         // protecting nothing.
+        //
+        // The `/releases` suffix is LOAD-BEARING, not decoration. THIS repo is
+        // `starplatform-hud`, which has the private `starplatform` as a prefix — matching on the
+        // bare repo name would fire on our own correct endpoint and fail every build.
         for private_repo in ["TheCodeSaiyan/starplatform", "TheCodeSaiyan/orgplatform"] {
             assert!(
                 !tauri_conf.contains(&format!("{private_repo}/releases")),

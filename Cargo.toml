@@ -1,4 +1,4 @@
-# org-hud — PUBLIC overlay client. Members install this.
+# starplatform-hud — PUBLIC overlay client. Members install this.
 #
 # Step 5 of the platform plan: the docs-and-CI skeleton is now a real workspace holding the Tauri
 # desktop overlay (`hud`) and the wire contract it speaks (`hud-protocol`).
@@ -24,7 +24,7 @@ rust-version = "1.90"
 # misdeclare the licence in published crate metadata.)
 license = "MIT"
 authors = ["TheCodeSaiyan"]
-repository = "https://github.com/TheCodeSaiyan/org-hud"
+repository = "https://github.com/TheCodeSaiyan/starplatform-hud"
 
 [workspace.dependencies]
 hud-protocol = { path = "hud-protocol" }

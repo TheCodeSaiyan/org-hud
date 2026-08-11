@@ -21,12 +21,12 @@
     { "Platform": "mac", "MinimumVersion": "12" }
   ],
   "ApplicationsToMonitor": {
-    "windows": ["orghud.exe", "StarCitizen.exe"],
-    "mac": ["com.thecodesaiyan.orghud"]
+    "windows": ["starplatformhud.exe", "StarCitizen.exe"],
+    "mac": ["com.thecodesaiyan.starplatformhud"]
   },
   "Actions": [
     {
-      "UUID": "com.thecodesaiyan.orghud.checkin",
+      "UUID": "com.thecodesaiyan.starplatformhud.checkin",
       "Name": "Check In",
       "Tooltip": "Check in to the live op.",
       "Icon": "imgs/action",
@@ -37,7 +37,7 @@
       ]
     },
     {
-      "UUID": "com.thecodesaiyan.orghud.ready",
+      "UUID": "com.thecodesaiyan.starplatformhud.ready",
       "Name": "Ready Toggle",
       "Tooltip": "Toggle your ready state for the live op.",
       "Icon": "imgs/action",
@@ -49,7 +49,7 @@
       ]
     },
     {
-      "UUID": "com.thecodesaiyan.orghud.objective.next",
+      "UUID": "com.thecodesaiyan.starplatformhud.objective.next",
       "Name": "Objective Next",
       "Tooltip": "Advance the op to the next objective. Lead only.",
       "Icon": "imgs/action",
@@ -58,7 +58,7 @@
       "States": [{ "Image": "imgs/key", "Title": "Obj +" }]
     },
     {
-      "UUID": "com.thecodesaiyan.orghud.objective.prev",
+      "UUID": "com.thecodesaiyan.starplatformhud.objective.prev",
       "Name": "Objective Previous",
       "Tooltip": "Step the op back one objective. Lead only.",
       "Icon": "imgs/action",
@@ -67,7 +67,7 @@
       "States": [{ "Image": "imgs/key", "Title": "Obj -" }]
     },
     {
-      "UUID": "com.thecodesaiyan.orghud.bed.pause",
+      "UUID": "com.thecodesaiyan.starplatformhud.bed.pause",
       "Name": "Bed Pause/Resume",
       "Tooltip": "Pause or resume the op's music bed. Lead only.",
       "Icon": "imgs/action",
@@ -79,7 +79,7 @@
       ]
     },
     {
-      "UUID": "com.thecodesaiyan.orghud.transport.next",
+      "UUID": "com.thecodesaiyan.starplatformhud.transport.next",
       "Name": "Bed Next Track",
       "Tooltip": "Skip to the next track on the bed. Lead only.",
       "Icon": "imgs/action",
@@ -88,7 +88,7 @@
       "States": [{ "Image": "imgs/key", "Title": "Next" }]
     },
     {
-      "UUID": "com.thecodesaiyan.orghud.transport.prev",
+      "UUID": "com.thecodesaiyan.starplatformhud.transport.prev",
       "Name": "Bed Previous Track",
       "Tooltip": "Go back a track on the bed. Lead only.",
       "Icon": "imgs/action",
@@ -97,7 +97,7 @@
       "States": [{ "Image": "imgs/key", "Title": "Prev" }]
     },
     {
-      "UUID": "com.thecodesaiyan.orghud.clip",
+      "UUID": "com.thecodesaiyan.starplatformhud.clip",
       "Name": "Soundboard Clip",
       "Tooltip": "Fire a soundboard clip into the ready room. Lead only.",
       "Icon": "imgs/action",
@@ -106,7 +106,7 @@
       "States": [{ "Image": "imgs/key", "Title": "Clip" }]
     },
     {
-      "UUID": "com.thecodesaiyan.orghud.quickaction",
+      "UUID": "com.thecodesaiyan.starplatformhud.quickaction",
       "Name": "Quick Action",
       "Tooltip": "Call something into the op's ready room — Downed, En route, On station. Any member on the op.",
       "Icon": "imgs/action",
@@ -115,7 +115,7 @@
       "States": [{ "Image": "imgs/key", "Title": "Call" }]
     },
     {
-      "UUID": "com.thecodesaiyan.orghud.memberclip",
+      "UUID": "com.thecodesaiyan.starplatformhud.memberclip",
       "Name": "Member Clip",
       "Tooltip": "Fire a clip into the ready room. Any member on the op, subject to the lead's clip policy.",
       "Icon": "imgs/action",
@@ -124,7 +124,7 @@
       "States": [{ "Image": "imgs/key", "Title": "Clip" }]
     },
     {
-      "UUID": "com.thecodesaiyan.orghud.complete",
+      "UUID": "com.thecodesaiyan.starplatformhud.complete",
       "Name": "Complete Op",
       "Tooltip": "End the live op. Press once to arm, again within 5s to confirm.",
       "Icon": "imgs/action",
@@ -136,7 +136,7 @@
       ]
     },
     {
-      "UUID": "com.thecodesaiyan.orghud.volume",
+      "UUID": "com.thecodesaiyan.starplatformhud.volume",
       "Name": "Bed Volume",
       "Tooltip": "Turn to set the op bed's volume. Lead only.",
       "Icon": "imgs/action",

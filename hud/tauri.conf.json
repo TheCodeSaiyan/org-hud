@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Org HUD",
   "version": "0.1.0",
-  "identifier": "com.thecodesaiyan.orghud",
+  "identifier": "com.thecodesaiyan.starplatformhud",
   "build": {
     "frontendDist": "./ui"
   },
@@ -30,7 +30,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/TheCodeSaiyan/org-hud/releases/latest/download/latest.json"
+        "https://github.com/TheCodeSaiyan/starplatform-hud/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVFMkQzMERCNUE0M0I3NTgKUldSWXQwTmEyekF0WHNhUEZlQnBPMXpSY1pBUUpFSkJZMC9DTUxsa1hVL3pNYjZrRmJkUjN2aXcK"
     }
