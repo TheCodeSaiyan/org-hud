@@ -9,9 +9,13 @@ permissions:
 jobs:
   release:
     strategy:
-      fail-fast: false
       # Don't let one platform's failure cancel the others: a release that ships Windows but not
       # Linux is far better than one that ships nothing.
+      #
+      # Exactly ONE `fail-fast` key. A duplicate is invalid YAML, and GitHub rejects the whole
+      # workflow at startup — the run fails in 0s with "workflow file issue" and NOTHING builds.
+      # That is how this file sat broken from the commit that dropped the macOS leg until the
+      # v0.1.0 re-cut: releases are rare, so no one pushed a tag in between to notice.
       fail-fast: false
       matrix:
         include:
