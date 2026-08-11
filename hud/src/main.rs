@@ -925,7 +925,7 @@ fn make_fullscreen(win: &tauri::WebviewWindow) {
 }
 
 // Pure title classifiers (cross-platform so they're unit-testable). The overlay's window title is
-// "Org HUD" (set at build time); we must never treat our own window appearing in the foreground as
+// "StarPlatform HUD" (set at build time); we must never treat our own window appearing in the foreground as
 // "the game is gone" — that's what caused the auto-hide show/hide oscillation in-game.
 //
 // Their only non-test callers are `#[cfg(windows)]`, and this is a bin crate — `--all-targets`
@@ -938,7 +938,7 @@ fn title_is_star_citizen(title: &str) -> bool {
 }
 #[cfg_attr(not(windows), allow(dead_code))]
 fn title_is_overlay(title: &str) -> bool {
-    title.contains("Org HUD")
+    title.contains("StarPlatform HUD")
 }
 
 /// The foreground window's title, if any. Windows-only; elsewhere there's no cheap foreground check.
@@ -1214,7 +1214,7 @@ async fn login(app: tauri::AppHandle) -> Result<(), String> {
     let parsed = Url::parse(&url).map_err(|e| e.to_string())?;
     let handle = app.clone();
     WebviewWindowBuilder::new(&app, "oauth", WebviewUrl::External(parsed))
-        .title("Sign in to Org HUD")
+        .title("Sign in to StarPlatform HUD")
         .inner_size(520.0, 760.0)
         .on_navigation(move |u| {
             // Capture the token ONLY from the configured server's own completion page — never from a
@@ -1657,7 +1657,7 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     let mi_auto = CheckMenuItemBuilder::with_id("autostart", "Start on login")
         .checked(is_auto)
         .build(app)?;
-    let mi_quit = MenuItemBuilder::with_id("quit", "Quit Org HUD").build(app)?;
+    let mi_quit = MenuItemBuilder::with_id("quit", "Quit StarPlatform HUD").build(app)?;
     let menu = MenuBuilder::new(app)
         .item(&mi_interact)
         .item(&mi_settings)
@@ -1669,7 +1669,7 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
 
     TrayIconBuilder::with_id("main")
         .icon(app.default_window_icon().unwrap().clone())
-        .tooltip("Org HUD")
+        .tooltip("StarPlatform HUD")
         .menu(&menu)
         .on_menu_event(move |app, event| match event.id().as_ref() {
             "interact" => toggle_interact(app),
@@ -2119,7 +2119,7 @@ fn main() {
             *app.state::<AppState>().config.lock().unwrap() = cfg.clone();
 
             let win = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-                .title("Org HUD")
+                .title("StarPlatform HUD")
                 .inner_size(WIN_W, WIN_H)
                 .transparent(true)
                 .decorations(false)
@@ -3678,8 +3678,8 @@ mod tests {
         // The auto-hide watcher must tell the game apart from its own overlay window, or showing the
         // overlay gets misread as "game gone" and it flickers.
         assert!(title_is_star_citizen("Star Citizen"));
-        assert!(!title_is_star_citizen("Org HUD"));
-        assert!(title_is_overlay("Org HUD"));
+        assert!(!title_is_star_citizen("StarPlatform HUD"));
+        assert!(title_is_overlay("StarPlatform HUD"));
         assert!(!title_is_overlay("Star Citizen"));
     }
 
