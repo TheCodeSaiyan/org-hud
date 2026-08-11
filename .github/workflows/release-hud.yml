@@ -1,0 +1,43 @@
+name: release-hud
+on:
+  push:
+    tags: ["v*"]
+  # Manual re-run (e.g. after fixing a signing secret) without tag surgery.
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, args: "" }
+          - { os: macos-latest,   args: "--target universal-apple-darwin" }
+          - { os: ubuntu-latest,  args: "" }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Linux deps
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: hud
+          tagName: ${{ github.ref_name }}
+          releaseName: "Org HUD ${{ github.ref_name }}"
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true
+          # REQUIRED: tauri.conf.json bundles both `nsis` and `msi`, and tauri-action defaults this
+          # to false — i.e. it would build latest.json from the MSI, silently moving existing
+          # -setup.exe users onto a different install path. Keep the updater on NSIS.
+          updaterJsonPreferNsis: true
+          args: ${{ matrix.args }}

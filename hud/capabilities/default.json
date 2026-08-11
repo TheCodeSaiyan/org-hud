@@ -1,0 +1,9 @@
+{
+  "identifier": "default",
+  "description": "Core + event permissions for the HUD main window. The frontend listens for five Rust-emitted events (hud:mode — which of the three interaction modes is live, hud:authed, hud:config, hud:context, hud:context-stale — the last two carry the live-op push from the member socket); app-defined commands (login/get_config/set_config/set_mode/…) stay allowlist-free as local app commands.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:event:default"
+  ]
+}

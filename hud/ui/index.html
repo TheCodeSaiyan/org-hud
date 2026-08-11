@@ -1,0 +1,2088 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Org HUD</title>
+<style>
+  /* Fonts are BUNDLED, never fetched. This is a fullscreen always-on-top overlay launched alongside
+     a game: it must not make a network request at start-up, and typography must never depend on one
+     resolving. Dropping the old Google Fonts `@import` fixed that — but on its own it silently
+     changed the typeface for everyone, because Geist is not installed on a normal Windows machine
+     and the stack fell through to Segoe UI. So the two variable faces ship next to this file
+     (`ui/fonts/*.woff2`, ~70 KB each) and are declared below.
+
+     Provenance: npm `geist@1.7.2` (`dist/fonts/geist-{sans,mono}/*-Variable.woff2`), SIL Open Font
+     License 1.1 — redistribution permitted; the licence travels with them in `ui/fonts/LICENSE.txt`.
+     Tauri's asset embedder walks `frontendDist` (`./ui`) recursively, so the whole directory,
+     subfolders included, is compiled into the binary — no bundler config needed. `font-src 'self'`
+     in tauri.conf.json's CSP already covers a relative `url()`; it must NOT gain a remote origin.
+
+     A Rust guard test (`overlay_ui_bundles_its_fonts_and_fetches_none`) scans this whole file, so do
+     not re-introduce a font-host name here, not even inside a comment. */
+  @font-face{
+    font-family:'Geist Variable'; src:url('fonts/Geist-Variable.woff2') format('woff2');
+    font-weight:100 900; font-style:normal; font-display:swap;
+  }
+  @font-face{
+    font-family:'Geist Mono Variable'; src:url('fonts/GeistMono-Variable.woff2') format('woff2');
+    font-weight:100 900; font-style:normal; font-display:swap;
+  }
+  :root{
+    --bg:#0F0E12; --bg-elev:#15131A; --surface:#1A1820; --surface-2:#221F2A; --surface-3:#2A2734;
+    --fg:#ECE7DD; --fg-muted:#A09A8E; --fg-dim:#6B6760;
+    --border:rgba(255,230,200,.07); --border-strong:rgba(255,230,200,.14);
+    --accent:#E8A23C; --accent-soft:rgba(232,162,60,.14); --accent-glow:rgba(232,162,60,.28); --accent-fg:#1A1208;
+    --ok:#74C68A; --warn:#E8C53C; --danger:#E8674C; --info:#6FA8E8;
+    --r-sm:6px; --r-md:10px; --r-lg:14px; --r-pill:999px;
+    /* Arrange-mode (interactive) tint. All four themes drive off --accent, which the stanton theme
+       also overrides inline at runtime with the org's live colour (applyIdentity) — so every value
+       here is derived with color-mix off the token, never a hardcoded hex. Tuned for text contrast:
+       at --arrange-tint 10% / --arrange-solid 98%, --fg stays >=11.5:1 and --fg-muted >=5.0:1 on the
+       three dark themes over any game backdrop (and >=4.6:1 even if an org picks pure white). */
+    --arrange-wash:var(--accent);   /* colour of the fullscreen scrim */
+    /* …at this opacity. THE DEFAULT ONLY: the settings "Interact tint" slider overrides this custom
+       property inline on <html> (applyTint), and Rust persists the number as `tint_opacity`. Keep
+       this literal in sync with TINT_DEFAULT on both sides — the guard test
+       `the_interact_tint_is_configurable_and_defaults_to_30` pins all three together. No theme may
+       re-declare it: an inline property on <html> beats every :root[data-theme=…] rule, so a
+       per-theme override would be dead the moment a config is applied — and the slider would lie. */
+    --arrange-scrim:30%;
+    --arrange-tint:10%;             /* accent share mixed into a widget's surface */
+    --arrange-solid:98%;            /* widget background opacity while arranging (90% at rest) */
+    --arrange-edge:40%;             /* accent share mixed into a widget's border */
+    --font:'Geist Variable','Geist',ui-sans-serif,system-ui,'Segoe UI',sans-serif;
+    --mono:'Geist Mono Variable','Geist Mono',ui-monospace,'JetBrains Mono',Consolas,monospace;
+  }
+  :root[data-theme="pyro"]{--bg:#100C0E;--bg-elev:#1A1213;--surface:#1F1517;--surface-2:#281A1C;--surface-3:#321F22;--fg:#F2E6E0;--fg-muted:#A89690;--fg-dim:#6F605C;--border:rgba(255,200,180,.07);--border-strong:rgba(255,200,180,.16);--accent:#F25C3F;--accent-soft:rgba(242,92,63,.14);--accent-glow:rgba(242,92,63,.34);--accent-fg:#1A0A06}
+  :root[data-theme="terra"]{--bg:#0B1014;--bg-elev:#0F161B;--surface:#121B22;--surface-2:#1A252D;--surface-3:#223139;--fg:#E2EAEC;--fg-muted:#8FA0A8;--fg-dim:#5E6D75;--border:rgba(180,220,230,.07);--border-strong:rgba(180,220,230,.14);--accent:#4FB8A1;--accent-soft:rgba(79,184,161,.14);--accent-glow:rgba(79,184,161,.28);--accent-fg:#04221A}
+  :root[data-theme="nyx"]{--bg:#F4F1EC;--bg-elev:#ECE8E1;--surface:#FFFFFF;--surface-2:#F7F4EE;--surface-3:#ECE6DC;--fg:#1B1722;--fg-muted:#5F586B;--fg-dim:#908AA0;--border:rgba(40,30,60,.10);--border-strong:rgba(40,30,60,.18);--accent:#5B3FD9;--accent-soft:rgba(91,63,217,.10);--accent-glow:rgba(91,63,217,.22);--accent-fg:#FFFFFF;--ok:#2E8C4D;--warn:#B98A0F;--danger:#C8412C;--info:#2F6FB8;
+    /* nyx is the one LIGHT theme, and its accent is a dark violet — a pure-accent wash at 20% is
+       nearly invisible over the (usually dark) game frame: measured Δrgb 24-36, contrast 1.05-1.10.
+       Mixing the accent toward nyx's own light --surface turns the scrim into a lavender veil that
+       reads as "light theme" and is clearly visible on dark AND bright backdrops (Δrgb 51/72/16,
+       contrast up to 1.47). Still 100% derived from --accent, so a runtime accent still flows.
+       nyx used to ALSO carry its own scrim opacity, 24% — a 1.2x bump on the old 20%. That is gone:
+       the opacity is now a user setting, so one number has to mean one thing on every theme — and a
+       theme rule could not win against the inline property applyTint writes anyway. The wash mix
+       above was always the substantive half of the nyx fix, and the flat default it now inherits
+       (30%) is stronger than the 24% it used to get. */
+    --arrange-wash:color-mix(in srgb, var(--accent) 55%, var(--surface))}
+
+  html,body{ margin:0; height:100%; background:transparent; overflow:hidden;
+    font:15px/1.45 var(--font); color:var(--fg); -webkit-user-select:none; user-select:none; cursor:default; }
+
+  /* Fullscreen overlay: empty space is click-through; only widgets capture the cursor. */
+  #overlay{ position:fixed; inset:0; pointer-events:none; }
+  .widget{ position:absolute; pointer-events:auto; max-width:42vw; }
+  body.interactive .widget{ outline:1px dashed var(--border-strong); outline-offset:3px; cursor:move; }
+  body.interactive .widget:hover{ outline-color:var(--accent); }
+  .widget.hidden{ display:none !important; }  /* must beat #card{display:flex} (ID selector) so the identity card can hide */
+
+  /* ---- resize handles (arrange mode ONLY) ----
+     Eight absolutely-positioned children per widget, inset to 0 so `#settings{overflow:hidden}`
+     cannot clip them. They drive TWO different gestures, and the split is the whole point:
+       * the four EDGES (n/s/e/w) resize the widget's BOX and reflow it — a widget that just needs to
+         be wider for long text;
+       * the four CORNERS (ne/nw/se/sw) uniformly SCALE the widget and everything inside it, by
+         writing the same per-component scale the settings size slider drives (applied as `zoom`).
+     Shrinking the box alone only crops the contents into a scroll area, which is not what "make this
+     widget smaller" means — see startScale().
+     Deliberately <div>s, not buttons: HIT_SELECTOR only reports button/input/select/textarea/a, so
+     the handles are never in the hit-rect report — and they do not need to be. Both gestures are
+     gated to arrange mode (same as dragging), where OS click-through is already dropped globally.
+     `display:none` at rest also means they cannot be hit in display mode even if something else
+     changed. The corners are appended AFTER the edges (see RSZ_DIRS) so that where their 12px boxes
+     overlap an edge's 6px strip, the corner — the later sibling at the same z-index — wins the hit.
+
+     `z-index:2` only lifts a handle above the widget's content because `.card-bg` sets
+     `backdrop-filter:blur(9px)`, which makes every widget its OWN stacking context — so the handles
+     compete only with their siblings inside that widget, not with the whole overlay. Drop the blur
+     (a tempting "perf win") and the z-indexes flatten into one global stacking order, where a later
+     widget can paint over an earlier widget's handles and arrange mode silently half-breaks. If the
+     blur ever goes, give `.widget` an explicit `isolation:isolate` in the same change. */
+  .rsz{ display:none; position:absolute; z-index:2; }
+  body.interactive .rsz{ display:block; }
+  body.interactive .rsz:hover{ background:var(--accent-soft); }
+  .rsz-n{ top:0; left:10px; right:10px; height:6px; cursor:ns-resize; }
+  .rsz-s{ bottom:0; left:10px; right:10px; height:6px; cursor:ns-resize; }
+  .rsz-w{ left:0; top:10px; bottom:10px; width:6px; cursor:ew-resize; }
+  .rsz-e{ right:0; top:10px; bottom:10px; width:6px; cursor:ew-resize; }
+  .rsz-nw{ top:0; left:0; width:12px; height:12px; cursor:nwse-resize; }
+  .rsz-se{ bottom:0; right:0; width:12px; height:12px; cursor:nwse-resize; }
+  .rsz-ne{ top:0; right:0; width:12px; height:12px; cursor:nesw-resize; }
+  .rsz-sw{ bottom:0; left:0; width:12px; height:12px; cursor:nesw-resize; }
+  /* Corner affordance: only the bottom-right grip is drawn, so arrange mode does not turn into a
+     field of dots. The other seven are invisible but live. It marks the SCALE gesture — the one a
+     user has to discover, since "drag the edge to resize" is the familiar half. */
+  body.interactive .rsz-se{ border-right:2px solid var(--accent); border-bottom:2px solid var(--accent);
+    border-bottom-right-radius:var(--r-lg); opacity:.75; }
+
+  .card-bg{ background:color-mix(in srgb, var(--surface) 90%, transparent); backdrop-filter:blur(9px);
+    border:1px solid var(--border-strong); border-radius:var(--r-lg); box-shadow:0 8px 30px rgba(0,0,0,.5);
+    transition:background-color .16s ease, border-color .16s ease; }
+
+  /* ---- interact-mode tint (decision C7.2: BOTH a scrim and widget tinting) ----
+     The scrim exists ONLY while body.interactive is on: it is the ::before box of #overlay and the
+     rule that gives it `content` is the `body.interactive` one, so in passive mode there is no box
+     at all — not a transparent one. That matters: this is a fullscreen always-on-top window over a
+     game, and a scrim that leaked into passive mode would veil the whole game.
+     It inherits #overlay's pointer-events:none (restated for clarity) and, as ::before, is the FIRST
+     box of #overlay, so every positioned .widget after it paints on top. The `.widget{pointer-events:
+     auto}` contract is untouched. */
+  body.interactive #overlay::before{
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background:color-mix(in srgb, var(--arrange-wash) var(--arrange-scrim), transparent);
+    animation:arrange-in .16s ease-out;
+    transition:background-color .16s ease;
+  }
+  /* ---- settings mode: NO backdrop at all ----
+     Settings captures the mouse, but it does NOT veil the game: the overlay is a game overlay, and a
+     user who opens settings mid-flight must still be able to see what their ship is doing. So this
+     is not "a more transparent scrim" — it is no scrim, exactly as in passive mode: `content:none`
+     means the ::before pseudo-element is never generated, so there is no box to paint, composite or
+     blur. (Setting a transparent BACKGROUND instead would leave a real fullscreen box in the tree.)
+     `body.settings` is only ever set ALONGSIDE `body.interactive` (see setMode(); the whole chain is
+     pinned by the Rust guard test `settings_mode_draws_no_backdrop`), so this rule has exactly one
+     job: cancel the box that rule creates.
+     It MUST stay declared after that rule: the two selectors have identical specificity (one class
+     on body + one id + a pseudo-element), so source order is the whole reason this override wins.
+     The settings panel stays readable on its own: #settings is a `.card-bg` widget (blurred, ~98%
+     opaque surface in interact/settings mode), which is the same surface every other widget relies
+     on over bare game. Nothing here needs to be per-theme. */
+  body.settings #overlay::before{ content:none; }
+  @keyframes arrange-in{ from{opacity:0} to{opacity:1} }
+  /* Panels shift toward the accent and go from 90% to --arrange-solid opaque so they still read as
+     panels against the wash. Mixing the opaque accent INTO the already-translucent surface raises
+     both the tint and the alpha in one step (result alpha = tint*1 + (1-tint)*solid). */
+  body.interactive .card-bg{
+    background:color-mix(in srgb, var(--accent) var(--arrange-tint),
+                         color-mix(in srgb, var(--surface) var(--arrange-solid), transparent));
+    border-color:color-mix(in srgb, var(--accent) var(--arrange-edge), var(--border-strong));
+  }
+  .cstar{ display:inline-block; width:18px; height:18px; background:var(--accent); flex:none;
+    clip-path:polygon(50% 0,61% 39%,100% 50%,61% 61%,50% 100%,39% 61%,0 50%,39% 39%);
+    filter:drop-shadow(0 0 6px var(--accent-glow)); }
+
+  /* identity card */
+  #card{ display:flex; align-items:center; gap:12px; padding:12px 16px; }
+  #txt b{ font-size:18px; display:block; line-height:1.15; letter-spacing:-0.01em; }
+  #txt .mantra{ color:var(--fg-muted); font-size:13px; }
+  #dot{ width:10px; height:10px; border-radius:50%; background:var(--fg-dim); margin-left:6px; transition:background .3s; }
+  #dot.live{ background:var(--ok); animation:pulse 2s infinite; }
+  @keyframes pulse{ 0%{box-shadow:0 0 0 0 rgba(116,198,138,.5)} 70%{box-shadow:0 0 0 9px rgba(116,198,138,0)} 100%{box-shadow:0 0 0 0 rgba(116,198,138,0)} }
+
+  /* member section widgets */
+  .sect{ width:300px; padding:10px 13px; }
+  /* Inner content box of every sectionWidget-built widget. Inert at rest; setHeightBox() turns it
+     into the scroller when the user gives the widget an explicit height, so the widget box itself
+     never scrolls and never carries its own resize handles out of reach. */
+  .w-body{ min-width:0; }
+  /* A widget the user has sized vertically becomes a flex column so `.w-body` can absorb the height.
+     Deliberately a CSS rule and not an inline style: ID rules must still win — an inline display on
+     #settings would beat `#settings{display:none}` and pin the panel open, and `.widget.hidden`
+     must keep its `!important` override. */
+  .widget[data-sized="wh"]{ display:flex; flex-direction:column; }
+  .sect h4{ margin:0 0 6px; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--fg-dim); font-family:var(--mono); }
+  .row{ display:flex; justify-content:space-between; gap:10px; padding:3px 0; border-bottom:1px solid var(--border); font-size:13px; }
+  .row .v{ color:var(--fg); font-family:var(--mono); }
+  .muted{ color:var(--fg-muted); font-size:12px; }
+  .op-step-active{ background:rgba(255,255,255,.04); border-radius:4px; }
+  .op-step-detail{ color:var(--fg-muted); font-size:11px; margin-top:2px; padding-left:1.4em; }
+  .op-phase{ margin-top:6px; padding:2px 0; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--fg-dim); font-family:var(--mono); }
+  .op-phase:first-child{ margin-top:0; }
+  .op-phase-active{ color:var(--fg); }
+  /* Per-step source attribution on a merged rail. Only drawn when the step's source is NOT already
+     the phase header above it (see objectiveLine) — under the C3 phase composition a source with no
+     authored phases becomes its own header, so an unconditional suffix would repeat it on every row.
+     `white-space:nowrap` is load-bearing, not polish: without it the suffix wraps INSIDE the source
+     name ("· Salvage / Run"), which reads as two different sources on a merged rail — measured in
+     the active step's row, where the rich detail block competes for the same line. */
+  .op-step-src{ color:var(--fg-dim); font-size:11px; font-family:var(--mono); white-space:nowrap; }
+  /* v17 risk chip. Colour-coded, but the level is also written out — the overlay sits over a game
+     at arbitrary opacity, so colour alone is not a reliable signal here. */
+  .op-step-risk{ font-size:10px; font-family:var(--mono); text-transform:uppercase; letter-spacing:.04em;
+    padding:0 4px; border-radius:var(--r-sm); border:1px solid currentColor; white-space:nowrap; }
+  .op-step-risk[data-risk="low"]{ color:var(--fg-dim); }
+  .op-step-risk[data-risk="medium"]{ color:var(--warn, #d19a3d); }
+  .op-step-risk[data-risk="high"]{ color:var(--no, #d15b5b); }
+  .op-step-fail{ color:var(--no, #d15b5b); }
+  .np-track{ display:flex; align-items:center; gap:10px; margin-top:6px; }
+  .np-cover{ width:44px; height:44px; flex:none; border-radius:var(--r-sm); object-fit:cover; border:1px solid var(--border-strong); }
+  .np-cover-placeholder{ display:flex; align-items:center; justify-content:center; font-size:18px;
+    background:var(--surface-2); color:var(--fg-dim); }
+  .np-meta{ min-width:0; }
+  .np-title{ font-size:13px; color:var(--fg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* control bar + settings */
+  #control{ display:none; align-items:center; gap:8px; padding:8px 12px; }
+  #control.show{ display:flex; }
+  #control .title{ font-weight:600; } #control .title b{ color:var(--accent); }
+  #control .who{ color:var(--fg-muted); font-size:12px; font-family:var(--mono); }
+  button{ font:inherit; font-size:13px; color:var(--accent-fg); background:var(--accent); border:1px solid var(--accent);
+    border-radius:var(--r-sm); padding:6px 11px; cursor:pointer; font-weight:500; }
+  button:hover{ filter:brightness(1.08); }
+  button.ghost{ background:transparent; color:var(--fg); border-color:var(--border-strong); }
+  button.ghost:hover{ background:var(--surface-2); filter:none; }
+  /* Field Guide widget. The 72vh cap lives on the inner BODY, not on the widget: on the widget it
+     made the Field Guide a permanent scroll container, so its resize handles scrolled out of view as
+     soon as the guide had more content than fit — the widget could be shrunk but never grown back. */
+  #sect-fieldguide{ width:300px; }
+  #sect-fieldguide > .w-body{ max-height:72vh; overflow-y:auto; }
+  .fg-input{ width:100%; box-sizing:border-box; margin:2px 0 8px; padding:6px 8px; font:inherit; font-size:13px;
+    background:var(--surface); color:var(--fg); border:1px solid var(--border-strong); border-radius:var(--r-sm); }
+  .fg-sec{ margin:6px 0; } .fg-sec > b{ font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--fg-dim); }
+  .fg-sec ul{ margin:3px 0 0; padding-left:16px; } .fg-sec li{ margin:2px 0; }
+  .fg-list{ display:flex; flex-direction:column; gap:3px; margin-top:4px; }
+  .fg-item{ text-align:left; width:100%; font-size:13px; padding:4px 7px; }
+  .fg-h{ margin:2px 0; } .fg-steps{ margin:4px 0 0; padding-left:18px; } .fg-steps li{ margin:3px 0; }
+  /* Op sources editor (C3.5). Same shape as the Field Guide — built once, updated in place — so it
+     reuses .fg-input / .fg-sec / .fg-list / .fg-item rather than growing a parallel set of rules. */
+  #sect-opedit{ width:300px; }
+  #sect-opedit > .w-body{ max-height:72vh; overflow-y:auto; }
+  .se-row{ display:flex; align-items:center; justify-content:space-between; gap:6px; padding:3px 0;
+    border-bottom:1px solid var(--border); font-size:13px; }
+  .se-row .se-name{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .se-btn{ flex:none; font-size:11px; padding:2px 7px; }
+  .se-add{ display:flex; gap:6px; margin-top:4px; }
+  .se-add .fg-input{ margin:0; }
+  /* Settings: a head (title + tabs) / scrolling body / foot sandwich. `overflow:hidden` on the card
+     keeps the panes inside the rounded corners; the body owns the scroll so the tab strip and the
+     footer buttons never scroll away. Native <select> popups paint outside the document, so the
+     clip does not trap them. */
+  #settings{ display:none; width:360px; padding:0; overflow:hidden; }
+  /* A flex COLUMN, not a block: with height:auto (the default) this lays out identically to a block
+     — head/body/foot stack and .set-body's own max-height caps the scroll area. But once the user
+     drags the panel's edge and an explicit height lands on #settings, flex is what keeps the tab
+     strip and the footer buttons pinned while only the body grows/shrinks. `min-height:0` is the
+     usual flex escape hatch that lets an overflow-y:auto child actually shrink. */
+  #settings.show{ display:flex; flex-direction:column; }
+  #settings h3{ margin:0 0 10px; font-size:14px; } #settings h3 b{ color:var(--accent); }
+  .set-head{ padding:12px 14px 0; }
+  .set-tabs{ display:flex; gap:2px; border-bottom:1px solid var(--border); }
+  .set-tab{ background:transparent; color:var(--fg-muted); border:0; border-bottom:2px solid transparent;
+    border-radius:var(--r-sm) var(--r-sm) 0 0; padding:6px 10px; font-size:11px; letter-spacing:.1em;
+    text-transform:uppercase; font-family:var(--mono); font-weight:500; }
+  .set-tab:hover{ color:var(--fg); background:var(--surface-2); filter:none; }
+  .set-tab.on{ color:var(--accent); border-bottom-color:var(--accent); }
+  .set-head, .set-foot{ flex:none; }
+  .set-body{ padding:12px 14px; max-height:58vh; overflow-y:auto; flex:1 1 auto; min-height:0; }
+  /* When the panel's height is the user's (applySize stamps data-sized="wh"), the 58vh auto-height
+     cap would leave dead space below the body — let it fill the box the user asked for instead. */
+  #settings[data-sized="wh"] .set-body{ max-height:none; }
+  /* Panes switch with CSS ONLY — never by removing rows from the DOM. saveFromForm() rebuilds the
+     WHOLE components map from [data-show]/[data-scale] queries, so a row that is not in the document
+     is written back as its default and silently wipes that component's saved setting. */
+  .set-pane{ display:none; } .set-pane.on{ display:block; }
+  .set-group{ margin-bottom:13px; } .set-group:last-child{ margin-bottom:0; }
+  .set-group > b{ display:block; margin-bottom:6px; font-size:11px; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--fg-dim); font-family:var(--mono); }
+  .set-foot{ display:flex; align-items:center; gap:10px; padding:10px 14px; border-top:1px solid var(--border); }
+  .set-foot .hint{ margin:0; flex:1; }
+  .keyrow{ display:flex; align-items:baseline; gap:10px; margin-bottom:9px; font-size:12.5px; color:var(--fg-muted); }
+  .keyrow .k{ flex:none; min-width:112px; }
+  kbd{ font:inherit; font-family:var(--mono); font-size:11px; color:var(--fg); background:var(--surface-2);
+    border:1px solid var(--border-strong); border-bottom-width:2px; border-radius:4px; padding:1px 5px; }
+  /* Rebind control. Styled AS a kbd so a rebindable combo reads like the fixed Esc row above it,
+     and only the hover/arming affordance says it is a button. */
+  button.keybind{ font:inherit; font-family:var(--mono); font-size:11px; color:var(--fg); background:var(--surface-2);
+    border:1px solid var(--border-strong); border-bottom-width:2px; border-radius:4px; padding:1px 5px; cursor:pointer; }
+  button.keybind:hover{ border-color:var(--accent); filter:none; }
+  button.keybind.arming{ border-color:var(--accent); color:var(--accent); }
+  .keyfoot{ display:flex; align-items:center; gap:10px; margin:2px 0 12px; }
+  .keyfoot .hint{ margin:0; flex:1; }
+  .setrow{ display:flex; flex-direction:column; gap:5px; margin-bottom:12px; }
+  .setrow > label{ font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--fg-dim); font-family:var(--mono); }
+  .setrow input[type=text], .setrow select{ font:inherit; font-size:13px; background:var(--surface); color:var(--fg);
+    border:1px solid var(--border-strong); border-radius:var(--r-sm); padding:6px 8px; }
+  .setrow.inline label{ display:flex; align-items:center; gap:8px; font-size:13px; color:var(--fg); text-transform:none; letter-spacing:0; }
+  .checks{ display:flex; flex-direction:column; gap:7px; }
+  .comprow{ display:flex; align-items:center; gap:8px; } .comprow label{ flex:1; display:flex; align-items:center; gap:8px; font-size:13px; }
+  .comprow input[type=range]{ width:84px; flex:none; }
+  /* Comms ticker: live ready-room chatter, oldest first */
+  .comm-ticker{ max-height:120px; overflow-y:auto; margin-bottom:8px; padding-right:2px; }
+  .tk-line{ font-size:12px; color:var(--fg-muted); padding:2px 0; line-height:1.35; word-break:break-word; }
+  .tk-line b{ color:var(--fg); font-weight:600; }
+  .row .v.ok{ color:var(--accent); }
+  /* Media-player transport (Music widget) */
+  .mx-transport{ display:flex; justify-content:center; align-items:center; gap:6px; margin:2px 0 8px; }
+  .mx-btn{ min-width:38px; padding:5px 8px; }
+  .mx-play{ min-width:46px; font-size:15px; border-color:var(--accent); }
+  .mx-line{ display:flex; align-items:center; gap:8px; margin-top:6px; font-size:13px; }
+  .mx-line > .lbl{ color:var(--fg-muted,#9aa); min-width:34px; }
+  .mx-line input[type=range]{ flex:1; width:auto; }
+  .mx-line select{ flex:1; }
+  .mx-line .v{ font-family:var(--mono); min-width:38px; text-align:right; }
+  .mx-btn.mx-busy{ background:var(--accent); color:#04121a; border-color:var(--accent); transition:background .1s; }
+  input[type=range]{ accent-color:var(--accent); width:100%; } input[type=checkbox]{ accent-color:var(--accent); width:15px; height:15px; }
+  .scaleval{ color:var(--fg-muted); font-family:var(--mono); font-size:12px; }
+  .hint{ color:var(--fg-dim); font-size:11px; font-family:var(--mono); margin-top:6px; }
+</style>
+</head>
+<body>
+  <div id="overlay">
+    <!-- public identity card (always on) -->
+    <div id="card" class="widget card-bg">
+      <span class="cstar"></span>
+      <div id="txt"><b id="name">Connecting…</b><span class="mantra" id="mantra"></span></div>
+      <div id="dot" title="connection status"></div>
+    </div>
+
+    <!-- control bar (interact + settings modes only) -->
+    <div id="control" class="widget card-bg">
+      <span class="cstar"></span><span class="title">Org <b>HUD</b></span>
+      <span class="who" id="who"></span>
+      <span id="acts"></span>
+      <!-- No key in this tooltip: the bindings are user-configurable, so a named combo would go
+           false on the first rebind. Settings → Keys is the one place they are shown. -->
+      <button id="gear" class="ghost" title="Settings mode">⚙</button>
+      <button id="done" class="ghost" title="Back to pass-through display (Esc)">Done ✕</button>
+    </div>
+
+    <!-- Settings (settings mode only — the panel and the opaque backdrop are one state). Tabbed, but
+         every pane stays in the DOM at all times — see the .set-pane CSS comment and saveFromForm(). -->
+    <div id="settings" class="widget card-bg">
+      <div class="set-head">
+        <h3>Org <b>HUD</b> · Settings</h3>
+        <div class="set-tabs" role="tablist">
+          <button class="set-tab on" data-tab="general" role="tab">General</button>
+          <button class="set-tab" data-tab="widgets" role="tab">Widgets</button>
+          <button class="set-tab" data-tab="keys" role="tab">Keys</button>
+        </div>
+      </div>
+      <div class="set-body">
+        <div class="set-pane on" data-pane="general">
+          <div class="setrow"><label>Server URL</label><input type="text" id="s-server" placeholder="http://localhost:8080"></div>
+          <div class="setrow"><label>Theme</label>
+            <select id="s-theme"><option value="stanton">Stanton</option><option value="pyro">Pyro</option><option value="terra">Terra</option><option value="nyx">Nyx</option></select></div>
+          <!-- The WHOLE-overlay zoom (Rust applies it with WebviewWindow::set_zoom). Distinct from the
+               per-widget size sliders on the Widgets tab, which are what corner-dragging writes — the
+               label says "Overall" so the two are not read as the same control. -->
+          <div class="setrow"><label>Overall size <span class="scaleval" id="s-scaleval"></span></label>
+            <input type="range" id="s-scale" min="0.8" max="1.4" step="0.05"></div>
+          <!-- Interact-mode scrim opacity. The min/max/step here are re-asserted from TINT_MIN /
+               TINT_MAX / TINT_STEP by the guard `the_interact_tint_is_configurable_and_defaults_to_30`
+               (a range input silently clamps anything outside its own attributes, so markup that
+               drifted below the JS clamp would quietly rewrite the user's saved value). Applies to
+               interact mode only — settings mode paints no backdrop at all. -->
+          <div class="setrow"><label>Interact tint <span class="scaleval" id="s-tintval"></span></label>
+            <input type="range" id="s-tint" min="0" max="60" step="5"
+              title="How strongly the game is tinted in interact mode. 0% = no tint."></div>
+          <div class="setrow inline"><label><input type="checkbox" id="s-autohide"> Auto-hide unless Star Citizen is focused</label></div>
+          <div class="setrow inline"><label><input type="checkbox" id="s-autostart"> Start on login</label></div>
+          <div class="setrow inline"><label><input type="checkbox" id="s-mediakeys"> Media keys control the op bed</label></div>
+          <div class="setrow inline"><label><input type="checkbox" id="s-localapi"> Local control API (Stream Deck &amp; other local tools)</label></div>
+          <div class="setrow"><span class="sethint">Lets a local tool drive the live op. Opens a loopback socket on port <span id="s-localport">48291</span> that requires the pairing key below &mdash; it grants access to <em>this HUD</em>, never to your org account, and every action is still checked by the server. Takes effect on restart.</span></div>
+          <div class="setrow" id="s-localkeyrow" hidden>
+            <label>Pairing key <span id="s-localstate" class="sethint"></span></label>
+            <input type="text" id="s-localkey" readonly spellcheck="false">
+            <div class="setbtns"><button type="button" id="s-localcopy">Copy</button><button type="button" id="s-localrevoke">Revoke</button></div>
+          </div>
+          <div class="setrow"><span class="sethint">Lets keyboard/hardware play, pause, next and previous drive the op's music bed through Windows. Only active while you lead a live op with an audible bed, and it shares the media keys with other players &mdash; Windows decides which one a press reaches.</span></div>
+        </div>
+        <div class="set-pane" data-pane="widgets">
+          <!-- Outside #comp-list on purpose: buildCompList() replaces that element's innerHTML. -->
+          <p class="hint">Size is the same control as dragging a widget's <b>corner</b> — both scale the
+            widget and its contents together. Drag an <b>edge</b> to change the box instead.</p>
+          <div class="setrow" id="preset-row">
+            <label>Start from a preset</label>
+            <div class="setbtns" id="preset-btns"></div>
+            <span class="sethint">Sets which widgets are shown. Your sizes and positions are kept, and you can change anything afterwards.</span>
+          </div>
+          <div id="comp-list"></div>
+        </div>
+        <div class="set-pane" data-pane="keys">
+          <!-- The three hotkeys are REBINDABLE, so this list is rendered from the live config by
+               renderKeys() rather than written out here — a hard-coded key would start lying the
+               moment anyone rebound it. Everything below #key-list is fixed behaviour. -->
+          <div id="key-list"></div>
+          <div class="keyfoot">
+            <button id="b-keyreset" class="ghost">Reset keys to defaults</button>
+            <span class="hint" id="key-msg">Click a combo to rebind it. Needs <kbd>Ctrl</kbd> or <kbd>Alt</kbd>; use the <b>left-hand</b> ones.</span>
+          </div>
+          <div class="keyrow"><span class="k"><kbd>Esc</kbd></span><span>Back to pass-through display from <b>either</b> mode, in one press (so does the <b>Done ✕</b> button and every tray item). Never rebindable — it is the escape hatch the hotkeys are allowed to fail without.</span></div>
+          <div class="keyrow"><span class="k">Drag</span><span>Move any widget while interacting. <b>Reset layout</b> puts them all back.</span></div>
+          <div class="keyrow"><span class="k">Drag an edge</span><span>Resize a widget's <b>box</b> — the contents reflow into it. Height stays automatic until you drag a top or bottom edge.</span></div>
+          <div class="keyrow"><span class="k">Drag a corner</span><span>Scale the widget <b>and everything in it</b>. Same control as that widget's <b>Size</b> slider on the <b>Widgets</b> tab; the opposite corner stays put.</span></div>
+          <div class="hint">No hotkey is swallowed — the combo still reaches the game. <b>AltGr cannot be used</b>: Windows reports it as Ctrl+Alt (it synthesises a phantom left Ctrl), so a binding that accepted it would fire whenever you typed <b>€ é á í ó ú ¦</b>. For the same reason a Ctrl+Alt combo only fires from the <b>left-hand</b> Ctrl and Alt.</div>
+        </div>
+      </div>
+      <div class="set-foot">
+        <button id="b-reset" class="ghost">Reset layout</button>
+        <span class="hint">Drag to move · edge = resize box · corner = scale · Esc exits · see <b>Keys</b></span>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const PROTOCOL_VERSION = 17;
+  const el = id => document.getElementById(id);
+  const T = window.__TAURI__;
+  const invoke = (cmd, args) => T ? T.core.invoke(cmd, args) : Promise.reject('no bridge');
+  const listen = (ev, cb) => T ? T.event.listen(ev, cb) : null;
+
+  let SERVER = (window.__HUD_SERVER__ || location.origin).replace(/\/+$/, '');
+  let cfg = null, perms = [], pollTimer = null, interactive = false;
+  // The three interaction modes Rust owns: 'passive' | 'interact' | 'settings'. `interactive` is the
+  // derived "is the overlay capturing the mouse?" bit (mode !== 'passive') that the drag/resize
+  // gestures gate on — kept as its own variable so those hot paths stay a single boolean read.
+  let hudMode = 'passive';
+  const setModeRemote = m => invoke('set_mode', { mode: m }).catch(() => {});
+  const wsBase = () => SERVER.replace(/^http(s?):/, 'ws$1:');
+  // Returns the in-flight save, so a caller that must not race it (Reset layout, which reloads the
+  // page out from under it) can await it. Failures are LOGGED rather than swallowed: a rejected
+  // set_config means the user's settings or layout never reached disk, and a bare `.catch(()=>{})`
+  // made that indistinguishable from a successful save.
+  const persist = () => (T && cfg)
+    ? invoke('set_config', { config: cfg }).catch(e => { console.error('HUD: saving config failed:', e); })
+    : Promise.resolve();
+
+  // ---- interact tint ----
+  // The interact-mode scrim's opacity, in PERCENT, persisted as `tint_opacity`. Kept as one clamp
+  // range shared by the slider markup, the live `input` handler and applyConfig, so a value that
+  // arrives from disk can never paint something the slider cannot express.
+  //   TINT_MIN = 0   — a true zero, for users who want the game completely untouched.
+  //   TINT_MAX = 60  — the scrim paints over the game but UNDER every widget, so a high value does
+  //                    not hide the HUD, it hides the GAME. 60% is a heavy wash that still leaves
+  //                    the game readable; 100% would just re-create the opaque backdrop that was
+  //                    removed from settings mode.
+  //   TINT_STEP = 5  — divides the range exactly (13 stops, same count as the overall-size slider).
+  // Only Rust's TINT_DEFAULT and the CSS `--arrange-scrim` literal repeat the default; the guard
+  // `the_interact_tint_is_configurable_and_defaults_to_30` pins all three to the same number.
+  const TINT_MIN = 0, TINT_MAX = 60, TINT_STEP = 5, TINT_DEFAULT = 30;
+  const tintOf = c => { const v = parseFloat(c && c.tint_opacity); return Number.isFinite(v) ? clamp(v, TINT_MIN, TINT_MAX) : TINT_DEFAULT; };
+  // The ONE writer of the scrim opacity. Inline on <html> so it outranks :root and every theme rule
+  // (no theme re-declares it — see the --arrange-scrim comment). CSS does the rest: the colour is
+  // still mixed from --arrange-wash, which is derived from --accent, so all four themes and a
+  // runtime org accent keep working with no colour table in JS or Rust.
+  function applyTint(pct){
+    document.documentElement.style.setProperty('--arrange-scrim', clamp(pct, TINT_MIN, TINT_MAX) + '%');
+    const lab = el('s-tintval'); if (lab) lab.textContent = Math.round(clamp(pct, TINT_MIN, TINT_MAX)) + '%';
+  }
+
+  // ---- hotkey bindings ----
+  // The three hotkeys are user-rebindable and persisted as `keys` (Rust: `HudConfig.keys`). A
+  // binding is {vk, ctrl, alt, shift} where `vk` is a WINDOWS virtual-key code — the hook reads
+  // virtual keys, so storing anything else (e.KeyboardEvent.code, a character) would need a second
+  // translation table on the Rust side that could disagree with this one.
+  //
+  // These defaults MIRROR Rust's `DEFAULT_KEYS`, and the guard test `the_default_key_bindings_agree`
+  // parses this literal and pins the two together — they are two halves of one default, exactly like
+  // TINT_DEFAULT. One line per action, fixed shape, because that guard parses it.
+  const KEY_DEFAULTS = {
+    interact:   { vk: 0x58, ctrl: true, alt: true, shift: false },
+    settings:   { vk: 0x43, ctrl: true, alt: true, shift: false },
+    visibility: { vk: 0x5A, ctrl: true, alt: true, shift: false },
+  };
+  // Action key ↔ label ↔ description. The key names are the field names of Rust's `KeyBindings`.
+  const KEY_ACTIONS = [
+    ['interact', 'Interact mode', 'widgets come forward and can be dragged, resized and clicked. The overlay takes the mouse; the game stays visible under a tint you set with <b>Interact tint</b> on the General tab. Same as the tray icon.'],
+    ['settings', 'Settings mode', 'opens this panel over <b>no</b> backdrop at all, so the game stays fully visible while you configure. The overlay takes the mouse. Same as the <b>⚙</b> button.'],
+    ['visibility', 'Show / hide overlay', 'takes the whole overlay off screen and back. Sticky: auto-hide will not re-show it. While shown this way, clicks pass straight through to the game.'],
+  ];
+  // vk → display name. Built rather than written out: 26 letters + 10 digits + 24 F-keys + a numpad
+  // is 70 entries that would otherwise be 70 chances to mistype a hex code.
+  const VK_NAMES = (() => {
+    const m = {};
+    for (let i = 0; i < 26; i++) m[0x41 + i] = String.fromCharCode(65 + i);
+    for (let i = 0; i <= 9; i++) m[0x30 + i] = String(i);
+    for (let i = 1; i <= 24; i++) m[0x6F + i] = 'F' + i;          // 0x70..0x87
+    for (let i = 0; i <= 9; i++) m[0x60 + i] = 'Num ' + i;
+    return Object.assign(m, { 0x20:'Space', 0x0D:'Enter', 0x09:'Tab', 0x08:'Backspace',
+      0x2D:'Insert', 0x2E:'Delete', 0x24:'Home', 0x23:'End', 0x21:'Page Up', 0x22:'Page Down',
+      0x25:'Left', 0x26:'Up', 0x27:'Right', 0x28:'Down', 0x13:'Pause', 0x91:'Scroll Lock',
+      0x6A:'Num *', 0x6B:'Num +', 0x6D:'Num -', 0x6E:'Num .', 0x6F:'Num /' });
+  })();
+  // KeyboardEvent.code (PHYSICAL position) → Windows vk. Deliberately covers only keys whose vk is
+  // the same on every layout — letters, digits, F-keys, the numpad and navigation. OEM punctuation
+  // is left unbindable on purpose: its vk is layout-dependent, so the label shown here would be a
+  // US-layout guess and could name a different character than the key actually produces.
+  const NAMED_CODES = { Space:0x20, Enter:0x0D, NumpadEnter:0x0D, Tab:0x09, Backspace:0x08,
+    Insert:0x2D, Delete:0x2E, Home:0x24, End:0x23, PageUp:0x21, PageDown:0x22,
+    ArrowLeft:0x25, ArrowUp:0x26, ArrowRight:0x27, ArrowDown:0x28, Pause:0x13, ScrollLock:0x91,
+    NumpadMultiply:0x6A, NumpadAdd:0x6B, NumpadSubtract:0x6D, NumpadDecimal:0x6E, NumpadDivide:0x6F };
+  function codeToVk(code){
+    let m;
+    if ((m = /^Key([A-Z])$/.exec(code))) return m[1].charCodeAt(0);
+    if ((m = /^Digit([0-9])$/.exec(code))) return 0x30 + (+m[1]);
+    if ((m = /^F([1-9]|1[0-9]|2[0-4])$/.exec(code))) return 0x6F + (+m[1]);
+    if ((m = /^Numpad([0-9])$/.exec(code))) return 0x60 + (+m[1]);
+    return NAMED_CODES[code] || 0;
+  }
+  const isModifierCode = code => /^(Control|Alt|Shift|Meta|OS|AltGraph)(Left|Right)?$/.test(code || '');
+  function bindLabel(b){
+    if (!b || !VK_NAMES[b.vk]) return 'unset';
+    const parts = [];
+    if (b.ctrl) parts.push('Ctrl');
+    if (b.alt) parts.push('Alt');
+    if (b.shift) parts.push('Shift');
+    parts.push(VK_NAMES[b.vk]);
+    return parts.join(' + ');
+  }
+  const sameBind = (a, b) => !!a && !!b && a.vk === b.vk && !!a.ctrl === !!b.ctrl && !!a.alt === !!b.alt && !!a.shift === !!b.shift;
+  // Normalise whatever is on disk into a complete, well-shaped set. Rust re-validates and falls back
+  // to its own defaults on save, so this only has to keep the UI renderable — but it must never hand
+  // back `undefined` for an action, or saveFromForm() would persist a hole.
+  function keysOf(c){
+    const src = (c && c.keys) || {};
+    const out = {};
+    for (const [k] of KEY_ACTIONS){
+      const b = src[k];
+      out[k] = (b && +b.vk > 0)
+        ? { vk: +b.vk, ctrl: !!b.ctrl, alt: !!b.alt, shift: !!b.shift }
+        : Object.assign({}, KEY_DEFAULTS[k]);
+    }
+    return out;
+  }
+  // The same three rules Rust's `check_binding`/`check_bindings` enforce. Both copies exist on
+  // purpose: this one explains the rejection while the user is still looking at the control, and
+  // Rust's is the trust boundary that a hand-edited config.json also has to pass.
+  function bindError(b, action, all){
+    if (!b.vk || !VK_NAMES[b.vk]) return 'That key can’t be bound — use a letter, number, F-key, numpad or navigation key.';
+    if (!(b.ctrl || b.alt)) return 'Needs Ctrl or Alt. A bare key — or Shift alone — would fire while you play or type.';
+    for (const [k, label] of KEY_ACTIONS) if (k !== action && sameBind(all[k], b)) return 'Already used by “' + label + '”.';
+    return null;
+  }
+
+  // ---- theme ----
+  let currentTheme = (T ? 'stanton' : (localStorage.getItem('org-theme') || 'stanton'));
+  let lastAccent = null;
+  function applyTheme(t){
+    currentTheme = t || 'stanton';
+    if (currentTheme === 'stanton'){ delete document.documentElement.dataset.theme; if (lastAccent) document.documentElement.style.setProperty('--accent', lastAccent); }
+    else { document.documentElement.dataset.theme = currentTheme; document.documentElement.style.removeProperty('--accent'); }
+    if (!T) localStorage.setItem('org-theme', currentTheme);
+  }
+
+  // ---- drag + positions ----
+  // Default layout. Widgets are free-positioned, so without defaults every one of them stacks on the
+  // same spot on a fresh install. There are two independent layout passes — renderData() lays out the
+  // REST-polled widgets, renderContext() the push-driven ones — so they each get their OWN column or
+  // they land on top of each other. A saved position in cfg.positions always wins over these.
+  const COL_W = 344;                        // .sect content 300px + padding/border ≈ 328, + 16px gutter
+  const COL_TOP = 80;                       // clears the identity card, which defaults to [16, 16]
+  const COL_GAP = 10;                       // vertical gap between stacked widgets
+  const COL_GUTTER = 16;                    // horizontal gap between columns
+  const COL_X_REST = 16;                    // column 1 — renderData() (standing/ops/proposals/…)
+  const COL_X_PUSH = COL_X_REST + COL_W;    // column 2 — renderContext() (op/squad/roster/…)
+  const COL_X_GUIDE = COL_X_PUSH + COL_W;   // column 3 — the self-managed Field Guide
+  const COL_X_EDIT  = COL_X_GUIDE + COL_W;  // column 4 — the self-managed Op sources editor
+  // Painted right edge each column pass last measured, so the next column can start clear of it.
+  // COL_W is only correct while every widget sits at scale 1.0: a widget at the slider's max (1.5)
+  // paints 328×1.5 ≈ 492px wide and would run straight through the column beside it. Columns only
+  // ever move RIGHT of their defaults (Math.max), so a shrunk column never yanks its neighbour in.
+  const colRight = { rest: COL_X_REST + COL_W - COL_GUTTER, push: COL_X_PUSH + COL_W - COL_GUTTER };
+  const colX = {
+    rest:  () => COL_X_REST,
+    push:  () => Math.max(COL_X_PUSH,  colRight.rest + COL_GUTTER),
+    guide: () => Math.max(COL_X_GUIDE, colRight.push + COL_GUTTER),
+    // One column-width right of wherever the guide column actually starts, so the two self-managed
+    // widgets travel together when a wide push column shoves the guide right. Neither is in a
+    // stackColumn pass, so there is no painted right edge to measure — the guide column has the same
+    // limitation today. A user drag still wins over both (applyPos reads cfg.positions first).
+    edit:  () => colX.guide() + COL_W,
+  };
+  function applyPos(node, wid, dflt){
+    if (!node) return;
+    const p = (cfg && cfg.positions && cfg.positions[wid]) || dflt;
+    if (p){ node.style.left = p[0] + 'px'; node.style.top = p[1] + 'px'; }
+    applySize(node, wid);   // one call site owns both halves of "restore this widget's box"
+  }
+
+  // ---- per-widget CSS `zoom` and the pointer-coordinate conversion it forces ----
+  // A widget's per-component size slider is applied as `node.style.zoom = compScale(key)`. Measured
+  // in Chromium (the WebView2 engine this runs on) — zoom is NOT a purely visual transform:
+  //   * it multiplies the USED value of the widget's own left/top/width/height, so `left:100px` on a
+  //     zoom:1.5 widget paints at viewport x=150;
+  //   * getBoundingClientRect() therefore reports the ZOOMED (viewport) box — 328px content box at
+  //     zoom 1.5 reads back as 491.x;
+  //   * offsetWidth/offsetLeft and the inline style values stay in the widget's OWN unzoomed space.
+  // PointerEvent.clientX/Y are viewport px. So every pointer delta must be divided by the widget's
+  // zoom before it is written into style.left/top/width/height, and a stored size is in the widget's
+  // own space — i.e. zoom-independent, so changing the size slider rescales a resized widget instead
+  // of fighting with it. (This also fixes dragging, which previously wrote viewport px straight into
+  // `left` and so made any widget at a non-1.0 component scale jump by that factor on first move.)
+  const zoomOf = node => parseFloat(node.style.zoom) || 1;
+  function savePos(node, wid){
+    cfg.positions = cfg.positions || {};
+    cfg.positions[wid] = [parseFloat(node.style.left) || 0, parseFloat(node.style.top) || 0];
+  }
+
+  // Stack widget ids into one default column whose PAINTED left edge is `x`; returns the painted
+  // right edge so the next column can clear it. Used by every layout pass so they cannot drift apart.
+  //
+  // The whole column is computed in VIEWPORT px and converted back per widget, because `zoom` is not
+  // a purely visual transform: it multiplies the used value of the widget's own left/top/width/height
+  // (see the zoomOf note above). Advancing `py` by the raw `offsetHeight` while `style.top` gets
+  // painted at `top × zoom` is what made the columns collide the moment two widgets had different
+  // per-component scales — measured: `op` at scale 1.5 buried `squad` by 110.8px and overran the
+  // Field Guide column horizontally. So: advance by the PAINTED height, and divide each widget's own
+  // origin by its own zoom.
+  function stackColumn(ids, x){
+    let py = COL_TOP, right = x;
+    ids.forEach(wid => {
+      const node = el(wid); if (!node) return;
+      // A user-dragged widget keeps its saved position and drops out of the column entirely.
+      if (cfg && cfg.positions && cfg.positions[wid]) { applyPos(node, wid); return; }
+      const z = zoomOf(node);
+      node.style.left = (x  / z) + 'px';
+      node.style.top  = (py / z) + 'px';
+      py += node.offsetHeight * z + COL_GAP;
+      right = Math.max(right, x + node.offsetWidth * z);
+    });
+    return right;
+  }
+
+  // ---- per-widget sizes ----
+  // cfg.sizes[wid] = [w, h], both in the widget's own CSS px as a BORDER box (applySize forces
+  // box-sizing:border-box so the number we store is exactly the box we measured — `.sect` is
+  // content-box 300px + 26 padding + 2 border, and mixing the two spaces silently drifts by 28px
+  // per resize). h <= 0 means AUTO: only a vertical drag (n/s and the corners) ever writes a height,
+  // so a widget the user has only widened keeps sizing itself to its content, as it does today.
+  // Edges first, corners last: they overlap by 2px and the later sibling wins the hit (see the CSS).
+  const RSZ_DIRS = ['n','s','e','w','ne','nw','se','sw'];
+  const RSZ_MIN_W = 140, RSZ_MIN_H = 48;
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+  // ---- THE canonical per-component scale range ----
+  // A widget's scale has exactly TWO editors — the Widgets-tab size slider and a corner drag — and
+  // they write the SAME value (`components[key].scale`, applied as CSS `zoom`). So they must agree on
+  // its range, and the only way to guarantee that is to derive both from here: the slider's markup is
+  // generated from these constants (compRow) and the drag clamps to them.
+  //
+  // Get this wrong and the feature silently un-does itself. `saveFromForm()` rebuilds `components`
+  // from the slider DOM, and a range input CLAMPS a value outside its min/max — so a drag that wrote
+  // 1.8 into a 0.7–1.5 slider would survive right up until the user next touched any setting, then
+  // snap back to 1.5 with no warning.
+  //
+  // The values are the range the slider already shipped with, kept deliberately: widening it would
+  // let a drag produce sizes the slider can no longer express (and 1.5 is where a 328px widget
+  // already paints ~492px, i.e. a full default column), and narrowing it would clamp — and destroy —
+  // scales existing users have already saved. STEP is what the drag snaps to on release, so the two
+  // editors share one value space instead of the slider quantising the drag's result behind its back.
+  const SCALE_MIN = 0.7, SCALE_MAX = 1.5, SCALE_STEP = 0.05;
+  // Which settings row a widget's corner drag writes to. `card` has its own row; every sectionWidget
+  // is `sect-<key>`. #control and #settings are chrome: no component row, no `zoom` — so a corner
+  // drag on those two has no scale to write and falls back to a box resize (see ensureResizeHandles).
+  const scaleKeyOf = wid => wid === 'card' ? 'card' : (wid.startsWith('sect-') ? wid.slice(5) : null);
+  // The ONE writer of a component's scale, shared by both editors so they cannot disagree.
+  // Assigning `.value` on the slider fires NO input/change event, which is what keeps this one-way:
+  // a dispatched event here would re-enter saveFromForm() and loop the two editors into each other.
+  function setCompScale(key, scale){
+    cfg.components = cfg.components || {};
+    // Object.assign, not a fresh literal: `components` is an open map (PR #29) and a future build may
+    // store fields this one has never heard of on the same entry.
+    cfg.components[key] = Object.assign({ show: true, scale: 1.0 }, cfg.components[key], { scale });
+    const slider = document.querySelector(`[data-scale="${key}"]`);
+    if (slider) slider.value = scale;
+  }
+  // The scrolling box for a widget with an explicit height — and it is NEVER the widget itself.
+  // `.rsz` handles are absolutely-positioned CHILDREN of the widget, so the moment the widget becomes
+  // the scroll container they scroll away with the content: measured at scrollTop 200, the south
+  // handle sat 87px above the top of the widget's own viewport, i.e. a widget shrunk below its
+  // content could not be resized back. (CLAUDE.md already warns that scroll containers trap
+  // positioned elements.) Every sectionWidget-built widget therefore carries a `.w-body` wrapper;
+  // #settings already had `.set-body`. #card / #control have neither and simply clip — they are
+  // single-row bars with nothing to scroll.
+  const scrollerOf = node => node.querySelector(':scope > .w-body, :scope > .set-body');
+  // Give `node` an explicit height (h > 0) or hand the height back to the stylesheet. Shared by
+  // applySize (restore) and startResize (live drag) so the two can never disagree about where the
+  // scroll lands. The flex-column that lets the inner body absorb the height is a CSS rule keyed on
+  // [data-sized="wh"], not an inline style: an inline `display:flex` on #settings would beat
+  // `#settings{display:none}` and pin the settings panel permanently open.
+  function setHeightBox(node, h){
+    const sc = scrollerOf(node);
+    if (h > 0){
+      node.style.height = h + 'px';
+      node.style.maxHeight = 'none';       // beat #sect-fieldguide > .w-body{max-height:72vh}
+      node.style.overflow = 'hidden';      // clip on the widget…
+      if (sc){                             // …scroll on the inner body, where no handle lives
+        sc.style.flex = '1 1 auto'; sc.style.minHeight = '0';
+        sc.style.overflowY = 'auto'; sc.style.maxHeight = 'none';
+      }
+      node.dataset.sized = 'wh';
+    } else {
+      node.style.height = node.style.maxHeight = node.style.overflow = node.style.overflowY = '';
+      if (sc) sc.style.flex = sc.style.minHeight = sc.style.overflowY = sc.style.maxHeight = '';
+      node.dataset.sized = 'w';
+    }
+  }
+  function applySize(node, wid){
+    if (!node) return;
+    const s = (cfg && cfg.sizes && cfg.sizes[wid]) || null;
+    if (!s || !(s[0] > 0)){
+      // No stored size → hand the box back to the stylesheet (.sect{width:300px}, #settings{360px},
+      // #sect-fieldguide > .w-body{max-height:72vh}) rather than leaving a stale inline override.
+      setHeightBox(node, 0);
+      node.style.width = node.style.maxWidth = node.style.boxSizing = '';
+      delete node.dataset.sized;
+      return;
+    }
+    node.style.boxSizing = 'border-box';
+    node.style.width = s[0] + 'px';
+    node.style.maxWidth = 'none';          // beat .widget{max-width:42vw}, which would clamp a wide widget
+    setHeightBox(node, s[1] > 0 ? s[1] : 0);
+  }
+
+  // EDGE resize: changes the widget's BOX and lets the contents reflow into it (a widget that needs
+  // to be wider for long text). Corners do NOT come here — they scale, see startScale. Arrange mode
+  // only, same gate as dragging, and the handles are display:none outside it. `dir` is one of
+  // n/s/e/w; dragging the west/north edge leaves the opposite edge where it is, so it writes BOTH a
+  // size and a position. Nothing in here touches `zoom` — box and scale are independent axes that
+  // compose (a widget can have both), which is why the stored size stays in the widget's OWN space.
+  function startResize(node, wid, dir, e){
+    e.preventDefault();
+    e.stopPropagation();               // must not also reach makeDraggable's pointerdown on the parent
+    const z = zoomOf(node);
+    const r = node.getBoundingClientRect();
+    const x0 = e.clientX, y0 = e.clientY;
+    const w0 = r.width / z, h0 = r.height / z;          // → the widget's own space
+    const l0 = parseFloat(node.style.left) || (r.left / z);
+    const t0 = parseFloat(node.style.top)  || (r.top  / z);
+    // Clamp so a widget can never be resized to nothing, and never past the screen edge — for real.
+    // The bound is PER DIRECTION because it depends on where the opposite edge is pinned: growing
+    // east is limited by what is left of the screen to the right of l0, growing west by how far the
+    // left edge can travel before it hits 0. (A single `window.innerWidth / z` bounds the SIZE, not
+    // the edge — a widget 900px in could still be dragged clean off the screen.) `zoom` multiplies
+    // the painted box, so every viewport limit divides back into the widget's own space.
+    const maxEast  = Math.max(RSZ_MIN_W, window.innerWidth  / z - l0);
+    const maxSouth = Math.max(RSZ_MIN_H, window.innerHeight / z - t0);
+    const maxWest  = Math.max(RSZ_MIN_W, l0 + w0);
+    const maxNorth = Math.max(RSZ_MIN_H, t0 + h0);
+    const vertical = dir.includes('n') || dir.includes('s');
+    let w = w0, h = h0, moved = false;
+    // Restate the width in the SAME statement that switches to border-box. The stylesheet width
+    // (.sect{width:300px}) is a CONTENT width, so reinterpreting it as a border width silently drops
+    // the 26px padding + 2px border: the widget visibly snapped 328→300 on pointerdown, before the
+    // pointer had moved at all.
+    node.style.boxSizing = 'border-box'; node.style.width = w0 + 'px'; node.style.maxWidth = 'none';
+    try { node.setPointerCapture(e.pointerId); } catch {}
+    const move = ev => {
+      const dx = (ev.clientX - x0) / z, dy = (ev.clientY - y0) / z;
+      if (dx || dy) moved = true;
+      if (dir.includes('e')) w = clamp(w0 + dx, RSZ_MIN_W, maxEast);
+      if (dir.includes('w')){
+        w = clamp(w0 - dx, RSZ_MIN_W, maxWest);                   // right edge pinned, left stops at 0
+        node.style.left = Math.max(0, l0 + w0 - w) + 'px';
+      }
+      if (dir.includes('s')) h = clamp(h0 + dy, RSZ_MIN_H, maxSouth);
+      if (dir.includes('n')){
+        h = clamp(h0 - dy, RSZ_MIN_H, maxNorth);
+        node.style.top = Math.max(0, t0 + h0 - h) + 'px';
+      }
+      node.style.width = w + 'px';
+      if (vertical) setHeightBox(node, h);
+    };
+    const up = () => {
+      node.removeEventListener('pointermove', move);
+      node.removeEventListener('pointerup', up);
+      node.removeEventListener('pointercancel', up);   // a cancelled gesture must not leak listeners
+      // A plain CLICK on a handle is not a resize. Without this test `up` commits a size regardless,
+      // so brushing a 6px edge converts a widget from auto-height to a frozen height + a scrolling
+      // body — permanently, with no way back short of Reset layout. Restore the stored box instead.
+      if (!moved){ applySize(node, wid); return; }
+      cfg.sizes = cfg.sizes || {};
+      const prevH = (cfg.sizes[wid] || [0, 0])[1] || 0;
+      // A horizontal-only drag must not stamp a height — that is what keeps "auto unless asked" true.
+      cfg.sizes[wid] = [Math.round(w), vertical ? Math.round(h) : prevH];
+      if (dir.includes('w') || dir.includes('n')) savePos(node, wid);
+      persist();
+      reportHitRects();                // the widget's controls just moved
+    };
+    node.addEventListener('pointermove', move);
+    node.addEventListener('pointerup', up);
+    node.addEventListener('pointercancel', up);
+  }
+
+  // CORNER drag = uniform SCALE. Shrinking a widget's box alone only crops its contents into a scroll
+  // area; "make this widget smaller" has to shrink what is inside it too. So a corner writes the
+  // per-component scale — the SAME value the Widgets-tab size slider writes, applied as CSS `zoom` —
+  // which scales the widget and its whole subtree together. `key` is scaleKeyOf(wid), never null.
+  //
+  // The opposite corner is the ANCHOR: it holds still in painted (viewport) pixels for the whole
+  // gesture, so the drag feels like pulling the corner under the cursor rather than resizing about
+  // the top-left.
+  function startScale(node, wid, key, dir, e){
+    e.preventDefault();
+    e.stopPropagation();               // must not also reach makeDraggable's pointerdown on the parent
+    // EVERY reference below is measured once, here, and never re-read. This gesture changes the
+    // widget's zoom while it runs, so re-reading that zoom (or the rect) inside `move` would feed
+    // the zoom it just wrote back into the next delta: the widget accelerates away from the cursor
+    // and, once it hits the clamp, oscillates. The pointer deltas are viewport px and every reference
+    // here is painted px, so — unlike startResize — nothing is divided by a zoom at all.
+    const z0 = zoomOf(node);
+    const r = node.getBoundingClientRect();            // PAINTED box: already multiplied by z0
+    const pw = r.width, ph = r.height;                 // the reference the scale factor is taken from
+    const l0 = parseFloat(node.style.left) || (r.left / z0);
+    const t0 = parseFloat(node.style.top)  || (r.top  / z0);
+    const ax = dir.includes('w') ? r.right  : r.left;  // the corner OPPOSITE the handle, in viewport px
+    const ay = dir.includes('n') ? r.bottom : r.top;
+    const x0 = e.clientX, y0 = e.clientY;
+    let moved = false, z = z0;
+    // Apply a zoom and re-pin the anchor: work out where the widget's painted origin has to be for
+    // the anchor corner to stay still, then divide it back out — `zoom` multiplies the used value of
+    // left/top, so painted x = left × zoom.
+    //
+    // The painted box is re-MEASURED at the new zoom rather than taken as w0 × zz. Text metrics round
+    // to device pixels, so a widget's own layout height genuinely shifts a pixel or two between zoom
+    // levels (measured: 301.9 own px at zoom 1 became 304.5 at zoom 0.8) and a frozen h0 left the
+    // anchored edge drifting by exactly that. This is a read of the BOX, never of the zoom divisor:
+    // `z` is computed purely from the frozen z0/pw/ph plus the pointer delta, so there is still no
+    // path for the gesture to feed its own output back into its next step (trap 4 stands).
+    const place = zz => {
+      node.style.zoom = zz;
+      const b = node.getBoundingClientRect();
+      node.style.left = Math.max(0, (dir.includes('w') ? ax - b.width  : ax) / zz) + 'px';
+      node.style.top  = Math.max(0, (dir.includes('n') ? ay - b.height : ay) / zz) + 'px';
+    };
+    try { node.setPointerCapture(e.pointerId); } catch {}
+    const move = ev => {
+      const dx = ev.clientX - x0, dy = ev.clientY - y0;
+      if (dx || dy) moved = true;
+      // Signed growth per axis in painted px (a west/north handle grows as the pointer goes the other
+      // way), combined into ONE uniform factor: (paintedW + gx + paintedH + gy) / (paintedW + paintedH).
+      // That is the plain size ratio when the pointer travels the diagonal, and still tracks smoothly
+      // when it travels along one edge — which max() of the two axis ratios does not.
+      const gx = dir.includes('w') ? -dx : dx;
+      const gy = dir.includes('n') ? -dy : dy;
+      z = clamp(z0 * (pw + gx + ph + gy) / (pw + ph), SCALE_MIN, SCALE_MAX);
+      place(z);
+    };
+    const up = () => {
+      node.removeEventListener('pointermove', move);
+      node.removeEventListener('pointerup', up);
+      node.removeEventListener('pointercancel', up);   // a cancelled gesture must not leak listeners
+      // Same rule as the other two gestures: a plain CLICK is not a drag. Brushing a 12px corner must
+      // commit nothing — not a scale, not the position the anchor maths would have written.
+      if (!moved){ node.style.zoom = z0; node.style.left = l0 + 'px'; node.style.top = t0 + 'px'; return; }
+      // Snap to the slider's step so both editors of this value share one value space, then re-place
+      // at the SNAPPED zoom — committing a position computed from the unsnapped one would leave the
+      // anchor a pixel or two off the moment applyConfig re-asserts the scale from cfg.
+      const zf = +clamp(Math.round(z / SCALE_STEP) * SCALE_STEP, SCALE_MIN, SCALE_MAX).toFixed(2);
+      place(zf);
+      setCompScale(key, zf);
+      // The anchor moved the widget's own origin, so the position has to be saved with the scale —
+      // but ONLY for a widget the user has already placed. A widget still in its default column
+      // belongs to the column, and stackColumn skips anything with a saved position WITHOUT
+      // advancing its cursor: pinning one here drops the NEXT widget straight on top of it
+      // (measured: shrinking the column's first widget buried it under the second by 182–257px).
+      // So scaling does not take a widget out of its column — only moving it does. The column
+      // re-places it on release, which for the drawn ⌟ grip (the SE corner, whose anchor IS the
+      // column's own origin) lands in exactly the same spot the anchor already put it.
+      if (cfg.positions && cfg.positions[wid]) savePos(node, wid);
+      persist();
+      // Re-run the layout exactly as a slider change does (saveFromForm → applyConfig): the widget's
+      // PAINTED height just changed, and that is what stackColumn advances by. reportHitRects() comes
+      // free with the render passes inside.
+      applyConfig(cfg, true);
+    };
+    node.addEventListener('pointermove', move);
+    node.addEventListener('pointerup', up);
+    node.addEventListener('pointercancel', up);
+  }
+
+  // sectionWidget() replaces node.innerHTML wholesale on every render (~every push / 15s poll), which
+  // destroys any child. So handles are (re)built after each render — cheap, and it keeps them out of
+  // the render template where they would be easy to lose. Same build-once-then-restore idea as
+  // ensureFieldGuide, just re-run rather than skipped.
+  function ensureResizeHandles(node, wid){
+    if (!node || node.querySelector('.rsz')) return;
+    RSZ_DIRS.forEach(d => {
+      const h = document.createElement('div');
+      h.className = 'rsz rsz-' + d;
+      h.dataset.rsz = d;
+      // A two-letter dir is a corner. Corners SCALE the widget and its contents; edges resize the box.
+      // A widget with no component row (#control, #settings) has no scale to write, so its corners
+      // fall back to a box resize rather than silently doing nothing.
+      const key = d.length === 2 ? scaleKeyOf(wid) : null;
+      h.title = key ? 'Drag to scale this widget and its contents' : 'Drag to resize this widget’s box';
+      h.addEventListener('pointerdown', ev => {
+        if (!interactive) return;
+        if (key) startScale(node, wid, key, d, ev); else startResize(node, wid, d, ev);
+      });
+      node.appendChild(h);
+    });
+  }
+
+  function makeDraggable(node, wid){
+    node.dataset.wid = wid;
+    ensureResizeHandles(node, wid);
+    node.addEventListener('pointerdown', e => {
+      if (!interactive) return;
+      // `.rsz` belongs in this list even though startResize already stopPropagation()s: a grab on an
+      // edge must resize OR move, never both, and relying on one guard for that is how it regresses.
+      if (e.target.closest('button,input,select,a,textarea,label,.rsz')) return;
+      e.preventDefault();
+      const z = zoomOf(node);
+      const r = node.getBoundingClientRect();
+      const ox = e.clientX - r.left, oy = e.clientY - r.top;   // grab offset, viewport px
+      let moved = false;
+      try { node.setPointerCapture(e.pointerId); } catch {}
+      const move = ev => {
+        moved = true;
+        node.style.left = Math.max(0, (ev.clientX - ox) / z) + 'px';
+        node.style.top  = Math.max(0, (ev.clientY - oy) / z) + 'px';
+      };
+      const up = () => {
+        node.removeEventListener('pointermove', move);
+        node.removeEventListener('pointerup', up);
+        node.removeEventListener('pointercancel', up);  // a cancelled gesture must not leak listeners
+        if (!moved) return;   // a plain click is not a drag — don't rewrite (and re-save) the position
+        savePos(node, wid);
+        persist();
+      };
+      node.addEventListener('pointermove', move);
+      node.addEventListener('pointerup', up);
+      node.addEventListener('pointercancel', up);
+    });
+  }
+
+  // ---- public identity card over the websocket ----
+  let ws, retry = 1000;
+  function setLive(on){ el('dot').className = on ? 'live' : ''; }
+  function applyIdentity(m){
+    el('name').textContent = m.name || 'Org'; el('mantra').textContent = m.mantra || '';
+    if (m.accent_colour){ lastAccent = m.accent_colour; if (currentTheme === 'stanton') document.documentElement.style.setProperty('--accent', m.accent_colour); }
+  }
+  function connect(){
+    ws = new WebSocket(wsBase() + '/ws');
+    ws.onopen = () => { setLive(true); retry = 1000; ws.send(JSON.stringify({type:'hello', protocol_version: PROTOCOL_VERSION})); };
+    ws.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch { return; } if (m.type === 'identity_changed') applyIdentity(m); };
+    ws.onclose = () => { setLive(false); setTimeout(connect, retry); retry = Math.min(retry * 2, 15000); };
+    ws.onerror = () => { try { ws.close(); } catch {} };
+  }
+  function reconnect(){ try { if (ws) ws.close(); } catch {} connect(); }
+
+  // ---- components / member data ----
+  const COMPS = [
+    ['card','Identity card'], ['op','Active op'], ['squad','Squad'], ['roster','Members online'],
+    ['standing','My standing'], ['ops','Upcoming ops'],
+    ['proposals','Open proposals'], ['elections','Elections'], ['fleet','Fleet'],
+    ['treasury','Treasury'], ['budget','Budget'], ['fieldguide','Field Guide'], ['opedit','Op sources'],
+    ['nowplaying','Now playing'], ['music','Music controls'], ['soundboard','Soundboard'],
+    ['comms','Comms'], ['memberclips','Clip board'],
+  ];
+  const comp = k => (cfg && cfg.components && cfg.components[k]) || { show:true, scale:1.0 };
+  const compShow = k => comp(k).show !== false;
+  const compScale = k => comp(k).scale || 1.0;
+  const fmtAuec = n => (n ?? 0).toLocaleString() + ' aUEC';
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const rows = items => items.length ? items.map(([k,v]) => `<div class="row"><span>${esc(k)}</span><span class="v">${esc(v)}</span></div>`).join('') : '<p class="muted">Nothing here yet.</p>';
+  async function getJson(path){ try { return JSON.parse(await invoke('fetch', { path })); } catch { return null; } }
+
+  // Each member section is its own draggable widget (id "sect-<key>"), laid out in a left column
+  // by default and free-positioned once dragged.
+  function sectionWidget(key, title, inner){
+    const wid = 'sect-' + key;
+    let node = el(wid);
+    if (!compShow(key)){ if (node) node.remove(); return; }
+    if (!node){
+      node = document.createElement('div');
+      node.id = wid; node.className = 'widget card-bg sect';
+      el('overlay').appendChild(node);
+      makeDraggable(node, wid);
+    }
+    node.style.zoom = compScale(key);
+    // Everything the widget renders goes inside `.w-body`, NOT straight into the widget. That
+    // wrapper is what lets a shrunk widget scroll its content while the resize handles — absolutely
+    // positioned children of the widget itself — stay put on the non-scrolling box. See scrollerOf().
+    node.innerHTML = `<div class="w-body"><h4>${esc(title)}</h4>${inner}</div>`;
+    // innerHTML just wiped every child, handles included — rebuild them, then re-assert the user's
+    // size. (The size lives in node.style so it survives the wipe; re-applying is idempotent and
+    // keeps a size pushed from Rust via `hud:config` taking effect on the next render.)
+    ensureResizeHandles(node, wid);
+    applySize(node, wid);
+  }
+
+  // ---- Field Guide (browse/search any guide, not tied to a live op) ----
+  // A stateful, persistent widget: built once, updated in place (so the 20s poll doesn't wipe the
+  // search box or the open guide). Reading + clicking work in-game via hit-rects; typing pops the
+  // overlay into interact mode (the input grabs focus) so the keyboard reaches it.
+  let fgState = { view: 'list', results: null, guide: null, item: null };
+  let fgTimer = null;
+
+  function fgSec(title, lines){
+    return `<div class="fg-sec"><b>${esc(title)}</b><ul>${lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul></div>`;
+  }
+  function fgItemBlock(it){
+    if (!it || !it.live) return '';
+    const locs = it.live.locations || [];
+    const name = (it.live.item && it.live.item.name) ? it.live.item.name : 'Item';
+    const body = locs.length
+      ? locs.slice(0,6).map(l => `<div class="row"><span>${esc(l.terminal || '?')} <span class="muted">${esc(l.place || '')}</span></span><span class="v">${esc(String(l.sell || l.buy || ''))}</span></div>`).join('')
+      : '<p class="muted">No buy/sell locations.</p>';
+    return `<div class="fg-sec"><b>${esc(name)} — where to buy/sell${it.stale ? ' (cached)' : ''}</b>${body}</div>`;
+  }
+  function fgRender(){
+    const b = el('fg-body'); if (!b) return;
+    if (fgState.view === 'guide' && fgState.guide){
+      const g = fgState.guide;
+      let h = `<div class="comprow"><button id="fg-back" class="ghost">‹ Guides</button></div>`;
+      h += `<div class="fg-h"><b>${esc(g.title)}</b> <span class="muted">${esc(g.category)}</span></div>`;
+      if (g.summary) h += `<p class="muted">${esc(g.summary)}</p>`;
+      if (g.best_for && g.best_for.length) h += fgSec('Best for', g.best_for);
+      if (g.equipment && g.equipment.length) h += fgSec('Equipment', g.equipment);
+      if (g.steps && g.steps.length)
+        h += `<div class="fg-sec"><b>Steps</b><ol class="fg-steps">${g.steps.map(s => `<li>${esc(s.title)}${s.detail ? ' — ' + esc(s.detail) : ''}${s.tip ? `<br><em>💡 ${esc(s.tip)}</em>` : ''}</li>`).join('')}</ol></div>`;
+      (g.sections || []).forEach(sec => { if (sec.lines && sec.lines.length) h += fgSec(sec.title, sec.lines); });
+      if (g.sources && g.sources.length)
+        h += `<div class="fg-sec"><b>Sources</b><ul>${g.sources.map(s => `<li>${esc(s.title)}${s.confidence ? ` (${esc(s.confidence)})` : ''}</li>`).join('')}</ul></div>`;
+      b.innerHTML = h;
+      const back = el('fg-back'); if (back) back.onclick = () => { fgState.view = 'list'; fgRender(); };
+    } else {
+      const r = fgState.results;
+      if (!r){ b.innerHTML = '<p class="muted">Loading…</p>'; return; }
+      const guides = r.guides || [], res = r.resources || [];
+      let h = '';
+      if (!guides.length && !res.length) h += '<p class="muted">No matches.</p>';
+      if (guides.length)
+        h += `<div class="fg-sec"><b>Guides</b><div class="fg-list">${guides.map(g => `<button class="fg-item ghost" data-slug="${esc(g.slug)}">${esc(g.title)} <span class="muted">${esc(g.category)}</span></button>`).join('')}</div></div>`;
+      if (res.length)
+        h += `<div class="fg-sec"><b>Items</b><div class="fg-list">${res.map(x => `<button class="fg-item ghost" data-item="${esc(x.name)}">${esc(x.name)} <span class="muted">${esc(x.category)}</span></button>`).join('')}</div></div>`;
+      if (fgState.item) h += fgItemBlock(fgState.item);
+      b.innerHTML = h;
+      b.querySelectorAll('.fg-item[data-slug]').forEach(btn => btn.onclick = () => fgOpenGuide(btn.dataset.slug));
+      b.querySelectorAll('.fg-item[data-item]').forEach(btn => btn.onclick = () => fgLookupItem(btn.dataset.item));
+    }
+    reportHitRects();
+  }
+  async function fgOpenGuide(slug){
+    const g = await getJson('/api/codex/guides/' + encodeURIComponent(slug));
+    if (g){ fgState.view = 'guide'; fgState.guide = g; fgRender(); }
+  }
+  async function fgLookupItem(name){
+    const it = await getJson('/api/codex/item?q=' + encodeURIComponent(name));
+    fgState.item = it; fgState.view = 'list'; fgRender();
+  }
+  function fgSearch(){
+    clearTimeout(fgTimer);
+    fgTimer = setTimeout(async () => {
+      const q = (el('fg-q') ? el('fg-q').value : '').trim();
+      fgState.item = null; fgState.view = 'list';
+      fgState.results = await getJson('/api/codex/search?q=' + encodeURIComponent(q)) || { guides: [], resources: [] };
+      fgRender();
+    }, 300);
+  }
+  // The Field Guide is built once and updated in place, so it never goes through a column pass — but
+  // where its column STARTS depends on how wide the push column actually painted, and that moves with
+  // the per-component scale sliders. Re-place it from both passes instead of only at build time.
+  // Same painted-space rule as stackColumn: applyPos writes straight into style.left/top, which the
+  // widget's own `zoom` then multiplies, so a screen position has to be divided by it on the way in.
+  function placeFieldGuide(){
+    const n = el('sect-fieldguide'); if (!n) return;
+    // Re-assert its scale here as well. The guide is built ONCE and updated in place, so it never goes
+    // back through sectionWidget's `node.style.zoom = compScale(key)` — without this, its size slider
+    // moved nothing until the next restart (and a corner drag would disagree with the slider, which is
+    // exactly what the two-editors-one-value rule forbids). Must run BEFORE zoomOf() reads it back.
+    n.style.zoom = compScale('fieldguide');
+    const z = zoomOf(n);
+    applyPos(n, 'sect-fieldguide', [colX.guide() / z, COL_TOP / z]);
+  }
+  function ensureFieldGuide(){
+    if (!compShow('fieldguide')){ const n = el('sect-fieldguide'); if (n) n.remove(); return; }
+    if (el('sect-fieldguide')) return; // built once; updated in place thereafter
+    sectionWidget('fieldguide', 'Field Guide',
+      `<input id="fg-q" class="fg-input" placeholder="Search guides &amp; items…" autocomplete="off"><div id="fg-body"></div>`);
+    // Self-managed: it is in neither layout pass, so without this it keeps its static position (0,0)
+    // and sits under the identity card. Its own column; a saved position still wins.
+    placeFieldGuide();
+    const q = el('fg-q');
+    if (q){
+      // Typing needs window focus — clicking the box pops interact mode (Esc/Done exits). Only ever
+      // an ESCALATION from passive: forcing 'interact' unconditionally would slam the settings
+      // backdrop back to translucent the moment a settings field took focus.
+      q.addEventListener('focus', () => { if (hudMode === 'passive') setModeRemote('interact'); });
+      q.addEventListener('input', fgSearch);
+    }
+    if (fgState.results) fgRender();
+    else getJson('/api/codex/search?q=').then(r => { fgState.results = r || { guides: [], resources: [] }; fgRender(); });
+  }
+
+  // ---- live op context (push-driven over the Rust-owned member socket) ----
+  // Music bed senders: go over the same Rust-owned `/ws/member` channel as set_objective /
+  // set_ready / complete_op (invoke() → Tauri command → send_member — NOT the public identity
+  // `ws` socket, which the server's public /ws handler doesn't process these against).
+  function setBed(key)     { return invoke('set_bed', { key }); }
+  function setBedVolume(p) { return invoke('set_bed_volume', { percent: Number(p) }); }
+  function setBedPaused(b) { return invoke('set_bed_paused', { paused: !!b }); }
+  function triggerClip(key){ return invoke('trigger_clip', { key }); }
+  function transportNext() { return invoke('transport_next'); }
+  function transportPrev() { return invoke('transport_prev'); }
+
+  // Comms: `channel` is always a STRING (the Discord channel id, or null for the default ready
+  // room) — Discord snowflakes exceed JS's safe-integer range, so it's never round-tripped
+  // through a JS Number. The Rust `send_quick_action`/`send_text` commands parse it to `u64`
+  // themselves right before it goes out over the member socket.
+  function sendQuickAction(channel, action){ return invoke('send_quick_action', { channel, action }); }
+  function sendCommsText(channel, text)   { return invoke('send_text', { channel, text }); }
+
+  // Member clip board (distinct from the lead-only `triggerClip`/soundboard above — different
+  // wire variant, different server-side authorisation: any checked-in member, policy/roll-up/
+  // budget gated).
+  function triggerMemberClip(key){ return invoke('trigger_member_clip', { key }); }
+  function setClipPolicy(policy) { return invoke('set_clip_policy', { policy }); }
+
+  // Cover art: an <img src> can't carry the Authorization bearer, so the Rust `bed_cover` command
+  // does the authed fetch and hands back a data: URI. Cached by track key so a 15s context push
+  // doesn't refetch the same cover; re-renders the widget once the (async) fetch settles.
+  let npCover = { key: null, uri: null };
+  let npCoverPending = null;
+  // Per-track now-playing progress. The server sends elapsed_ms (ms since this track started) on each
+  // context push; the bed LOOPS, so we wrap the position at the track duration and animate locally in
+  // between pushes. null = no track / no progress to show.
+  let npAnim = null; // { elapsedMs, at, durationMs, paused }
+  function fmtTime(ms){ const s = Math.max(0, Math.floor(ms/1000)); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; }
+  function tickNpProgress(){
+    const fill = el('np-bar-fill'); if (!npAnim || !fill) return;
+    const cur = npAnim.paused ? npAnim.elapsedMs : npAnim.elapsedMs + (performance.now() - npAnim.at);
+    const elapsed = el('np-elapsed'), remain = el('np-remain');
+    if (npAnim.durationMs > 0){
+      const pos = cur % npAnim.durationMs;
+      fill.style.width = Math.min(100, (pos / npAnim.durationMs) * 100) + '%';
+      if (elapsed) elapsed.textContent = fmtTime(pos);
+      if (remain) remain.textContent = '-' + fmtTime(npAnim.durationMs - pos);
+    } else {
+      // Unknown track length → count-up only, no filled bar or remaining time.
+      fill.style.width = '0%';
+      if (elapsed) elapsed.textContent = fmtTime(cur);
+      if (remain) remain.textContent = '';
+    }
+  }
+  setInterval(tickNpProgress, 500);
+  function ensureCover(key){
+    if (!key || npCover.key === key || npCoverPending === key) return;
+    npCoverPending = key;
+    invoke('bed_cover', { key }).then(uri => {
+      npCover = { key, uri };
+    }).catch(() => {
+      npCover = { key, uri: null };
+    }).finally(() => {
+      if (npCoverPending === key) npCoverPending = null;
+      renderNowPlaying(lastCtx);
+    });
+  }
+  let ctxStale = false;
+  // `groupName` is the phase header this step is drawn under, and it is what suppresses a redundant
+  // attribution suffix. Under the C3 phase composition a source with NO authored phases becomes its
+  // own header — so on the common single-contract op the header already names the source, and an
+  // unconditional per-step suffix would repeat that name on every single row. The suffix therefore
+  // only appears where the header does NOT already say it: a contract with authored phase names, the
+  // ad-hoc tail sitting under someone else's phase, or an ungrouped rail with no headers at all.
+  function objectiveLine(o, groupName){
+    const mark = o.done ? '✅' : (o.active ? '▶️' : '⬜');
+    const t = o.timing ? ` <span class="muted">(${esc(o.timing)})</span>` : '';
+    const src = (o.source && o.source !== groupName)
+      ? ` <span class="op-step-src" data-src-kind="${esc(o.source_kind || '')}">· ${esc(o.source)}</span>`
+      : '';
+    // v17 contract metadata. `risk` and `optional` ride on EVERY step, not just the active one:
+    // they are what a lead scans the rail for ("where does this get dangerous, what can we drop?").
+    // Fields are absent on guide/ad-hoc steps and on a v16 server, so every read is guarded.
+    const risk = o.risk ? ` <span class="op-step-risk" data-risk="${esc(o.risk)}">${esc(o.risk)}</span>` : '';
+    const opt  = o.optional ? ' <span class="muted">(optional)</span>' : '';
+    let extra = '';
+    if (o.active) {
+      if (o.detail)   extra += `<div class="op-step-detail">${esc(o.detail)}</div>`;
+      if (o.location) extra += `<div class="op-step-detail">📍 ${esc(o.location)}</div>`;
+      if (o.tip)      extra += `<div class="op-step-detail">💡 ${esc(o.tip)}</div>`;
+      // Kit requirements are active-step-only by design (the server sends them that way): they
+      // matter to whoever is doing the step now, not to someone reading ahead.
+      if (o.required_vehicle)   extra += `<div class="op-step-detail">🚀 ${esc(o.required_vehicle)}</div>`;
+      if (o.required_equipment) extra += `<div class="op-step-detail">🧰 ${esc(o.required_equipment)}</div>`;
+      if (o.failure_condition)  extra += `<div class="op-step-detail op-step-fail">⚠️ ${esc(o.failure_condition)}</div>`;
+    }
+    return `<div class="row${o.active ? ' op-step-active' : ''}"><span>${mark} ${esc(o.label)}${t}${risk}${opt}${src}</span>${extra}</div>`;
+  }
+  // Mirrors the Rust `group()` (Task 3): contiguous ranges, a phase covers `span`
+  // consecutive objectives, leftover objectives form an unnamed trailing group,
+  // no phases -> one flat unnamed group.
+  function groupObjectives(objectives, phases) {
+    if (!phases || !phases.length) return [{ name: null, items: objectives, start: 0 }];
+    const groups = []; let idx = 0;
+    for (const p of phases) {
+      if (!p.span) continue;
+      if (idx >= objectives.length) break;
+      const end = Math.min(idx + p.span, objectives.length);
+      groups.push({ name: p.name, items: objectives.slice(idx, end), start: idx });
+      idx = end;
+    }
+    if (idx < objectives.length) groups.push({ name: null, items: objectives.slice(idx), start: idx });
+    return groups;
+  }
+  function renderOp(ctx){
+    const op = ctx && ctx.on_op ? ctx.op : null;
+    if (!op || !compShow('op')){ const n = el('sect-op'); if (n) n.remove(); return; }
+    const stale = ctxStale ? '<span class="muted"> · reconnecting…</span>' : '';
+    const activeIdx = (op.objectives || []).findIndex(o => o.active);
+    const objs = groupObjectives(op.objectives || [], op.phases || []).map(g => {
+      const isCurrent = activeIdx >= 0 && activeIdx >= g.start && activeIdx < g.start + g.items.length;
+      const header = g.name ? `<div class="op-phase${isCurrent ? ' op-phase-active' : ''}">▸ ${esc(g.name)}</div>` : '';
+      return header + g.items.map(o => objectiveLine(o, g.name)).join('');
+    }).join('') || '<p class="muted">No objectives.</p>';
+    const lead = op.is_lead
+      ? `<div class="comprow" style="margin-top:8px"><button class="ghost" id="op-prev">‹ Prev</button><button id="op-next">Next ›</button><button class="ghost" id="op-complete" title="Complete &amp; close this op">Complete ✓</button></div>`
+      : '';
+    const orders = (op.orders || []).map(o => `<div class="row"><span>${esc(o)}</span></div>`).join('');
+    // Only offer Details when we actually know where it goes. A server predating OpContext.id
+    // sends none, and a button that opens a guessed URL is how this shipped broken in the first
+    // place — it pointed at /panel/ops, which has never been a route.
+    const details = op.id
+      ? `<div class="comprow" style="margin-top:8px"><button class="ghost" id="op-details">Details</button></div>`
+      : '';
+    const inner = `<div class="muted">${esc(op.status)}${stale}</div>${objs}${lead}${orders}${details}`;
+    sectionWidget('op', op.name, inner);
+    const next = el('op-next'); if (next) next.onclick = () => invoke('set_objective', { index: (op.current_stage||0) + 1 }).catch(()=>{});
+    const prev = el('op-prev'); if (prev) prev.onclick = () => invoke('set_objective', { index: Math.max(0,(op.current_stage||0) - 1) }).catch(()=>{});
+    const det = el('op-details'); if (det) det.onclick = () => invoke('open_url', { path: `/panel/events/${encodeURIComponent(op.id)}` }).catch(()=>{});
+    // Complete (close) the op — two-click confirm so it can't fire by accident.
+    const cmp = el('op-complete');
+    if (cmp) cmp.onclick = () => {
+      if (cmp.dataset.armed !== '1') { cmp.dataset.armed = '1'; cmp.textContent = 'Confirm?'; return; }
+      invoke('complete_op').catch(() => {});
+    };
+  }
+  function renderSquad(ctx){
+    const op = ctx && ctx.on_op ? ctx.op : null;
+    if (!op || !compShow('squad')){ const n = el('sect-squad'); if (n) n.remove(); return; }
+    const squad = op.squad || [];
+    const list = squad.length ? squad.map(s => {
+      const where = [s.zone, s.status].filter(Boolean).map(esc).join(' · ') || '—';
+      return `<div class="row"><span>${s.ready ? '✅' : '⬜'} ${esc(s.name)}</span><span class="v">${where}</span></div>`;
+    }).join('') : '<p class="muted">No one checked in.</p>';
+    const toggle = `<div class="comprow" style="margin-top:8px"><button id="sq-ready" class="${op.my_ready ? 'ghost' : ''}">${op.my_ready ? 'Stand down' : "I'm ready"}</button></div>`;
+    sectionWidget('squad', `Squad — ${op.ready_count||0}/${squad.length} ready`, list + toggle);
+    const b = el('sq-ready'); if (b) b.onclick = () => invoke('set_ready', { ready: !op.my_ready }).catch(()=>{});
+  }
+  function renderRoster(ctx){
+    if (!compShow('roster')){ const n = el('sect-roster'); if (n) n.remove(); return; }
+    const roster = (ctx && ctx.roster) || [];
+    const list = roster.length ? roster.map(p => {
+      const where = [p.zone, p.status].filter(Boolean).map(esc).join(' · ') || '—';
+      return `<div class="row"><span>${esc(p.name)}</span><span class="v">${where}</span></div>`;
+    }).join('') : '<p class="muted">Nobody else online.</p>';
+    sectionWidget('roster', 'Members online', list);
+  }
+  function renderNowPlaying(ctx){
+    const op = ctx && ctx.on_op ? ctx.op : null;
+    const m = op && op.music;
+    if (!op || !m || !compShow('nowplaying')){ npAnim = null; const n = el('sect-nowplaying'); if (n) n.remove(); return; }
+    const label = m.bed
+      ? m.bed.replace(/^bed\//,'').replace(/[_/]/g,' ').replace(/\b\w/g, c => c.toUpperCase())
+      : null;
+    const line = m.paused ? '⏸ Paused'
+               : label   ? `♪ ${esc(label)} · ${m.volume|0}%`
+               : '♪ off';
+    const status = m.active
+      ? '<span class="v">● live on 1 bot</span>'
+      : '<span class="muted">○ no bot</span>';
+    const allTags = Array.from(new Set([...(m.tags||[]), ...(m.stage_tags||[])]));
+    const tagline = allTags.length ? `<div class="muted">[${allTags.map(esc).join(' · ')}]</div>` : '';
+    const np = m.now_playing;
+    let trackBlock = '';
+    if (np) {
+      ensureCover(np.key);
+      const coverUri = (npCover.key === np.key) ? npCover.uri : null;
+      const cover = coverUri
+        ? `<img class="np-cover" src="${coverUri}" alt="">`
+        : '<div class="np-cover np-cover-placeholder">🎵</div>';
+      const title = esc(np.title || np.key);
+      const artist = np.artist ? ` — ${esc(np.artist)}` : '';
+      const genre = np.genre ? `<div class="muted">${esc(np.genre)}</div>` : '';
+      const pl = m.playlist;
+      const pos = pl ? `<div class="muted">Track ${pl.pos + 1} / ${pl.len}</div>` : '';
+      // Per-track progress bar (the bed loops → position wraps at the duration). Animated locally by
+      // tickNpProgress from elapsed_ms; length/remaining only when the track duration is known.
+      npAnim = { elapsedMs: (m.elapsed_ms | 0), at: performance.now(), durationMs: (np.duration_ms | 0), paused: !!m.paused };
+      const progress = `<div style="margin-top:4px">`
+        // The fill is the theme accent. It used to read an undefined `--v` custom property with a
+        // hardcoded light-blue fallback — `.v` is a CSS *class*, `--v` was never declared — so the
+        // fallback always won and the bar was theme-blind in all four themes (and ignored an org's
+        // runtime accent colour). A Rust guard pins that no `--v` reference comes back.
+        + `<div style="height:4px;background:rgba(128,128,128,.25);border-radius:2px;overflow:hidden"><div id="np-bar-fill" style="height:100%;width:0%;background:var(--accent);transition:width .5s linear"></div></div>`
+        + `<div style="display:flex;justify-content:space-between;font-size:11px;margin-top:2px"><span id="np-elapsed">0:00</span><span id="np-remain" class="muted"></span></div>`
+        + `</div>`;
+      trackBlock = `<div class="np-track">${cover}<div class="np-meta"><div class="np-title" title="${title}${artist}">${title}${artist}</div>${genre}${pos}${progress}</div></div>`;
+    } else {
+      npAnim = null;
+    }
+    sectionWidget('nowplaying', 'Now playing', `<div class="row"><span>${line}</span>${status}</div>${tagline}${trackBlock}`);
+    tickNpProgress();
+  }
+  function renderMusicControls(ctx){
+    const op = ctx && ctx.on_op ? ctx.op : null;
+    if (!op || !op.is_lead || !compShow('music')){ const n = el('sect-music'); if (n) n.remove(); return; }
+    const m = op.music || {};
+    const cur = m.bed || '';
+    const vol = (m.volume != null) ? (m.volume|0) : 70;
+    const paused = !!m.paused;
+    const moods = [['','— off —'],['bed/staging','Staging'],['bed/combat','Combat'],['bed/qt','Quantum'],
+                   ['bed/portal','Portal'],['bed/calm','Calm'],['bed/debrief','Debrief'],
+                   ['bed/mining','Mining'],['bed/stealth','Stealth']];
+    const opts = moods.map(([v,t]) => `<option value="${v}"${v===cur?' selected':''}>${t}</option>`).join('');
+    const inner = `
+      <div class="mx-transport">
+        <button class="ghost mx-btn" id="mx-prev" title="Previous track">◀◀</button>
+        <button class="ghost mx-btn mx-play" id="mx-play" title="${paused?'Resume':'Pause'}">${paused?'▶':'⏸'}</button>
+        <button class="ghost mx-btn" id="mx-next" title="Next track">▶▶</button>
+      </div>
+      <div class="mx-line"><span class="lbl">Vol</span><input type="range" id="mx-vol" min="0" max="100" value="${vol}"><span class="v" id="mx-volval">${vol}%</span></div>
+      <div class="mx-line"><span class="lbl">Bed</span><select id="mx-mood">${opts}</select></div>`;
+    sectionWidget('music', 'Music', inner);
+    // Optimistic feedback: audio takes ~1-3s (worker poll + crossfade), so acknowledge the press
+    // instantly instead of waiting for the next 15s context push.
+    const ack = (b) => { if(!b) return; b.classList.add('mx-busy'); setTimeout(()=>b.classList.remove('mx-busy'), 550); };
+    const mood = el('mx-mood'); if (mood) mood.onchange = () => { ack(mood); setBed(mood.value).catch(()=>{}); };
+    const v = el('mx-vol'); const vv = el('mx-volval');
+    if (v){ v.oninput = () => { if (vv) vv.textContent = (v.value|0) + '%'; };
+            v.onchange = () => setBedVolume(v.value).catch(()=>{}); }
+    const play = el('mx-play');
+    if (play) play.onclick = () => {
+      const willPause = !paused;                        // optimistic icon flip
+      play.textContent = willPause ? '▶' : '⏸';
+      play.title = willPause ? 'Resume' : 'Pause';
+      ack(play);
+      setBedPaused(willPause).catch(() => { play.textContent = paused ? '▶' : '⏸'; });
+    };
+    const prevBtn = el('mx-prev'); if (prevBtn) prevBtn.onclick = () => { ack(prevBtn); transportPrev().catch(()=>{}); };
+    const nextBtn = el('mx-next'); if (nextBtn) nextBtn.onclick = () => { ack(nextBtn); transportNext().catch(()=>{}); };
+  }
+  function renderSoundboard(ctx){
+    const op = ctx && ctx.on_op ? ctx.op : null;
+    const board = op && op.soundboard;
+    if (!op || !op.is_lead || !board || !board.length || !compShow('soundboard')){
+      const n = el('sect-soundboard'); if (n) n.remove(); return;
+    }
+    const btns = board.map((c,i) =>
+      `<button class="ghost sb-btn" data-i="${i}">${esc(c.label || c.key)}</button>`).join(' ');
+    sectionWidget('soundboard', 'Soundboard', `<div class="comprow">${btns}</div>`);
+    board.forEach((c,i) => {
+      const b = el('sect-soundboard').querySelector(`.sb-btn[data-i="${i}"]`);
+      if (b) b.onclick = () => triggerClip(c.key).catch(()=>{});
+    });
+  }
+  // Member channel-comms board: unlike the lead-only soundboard, this shows for ANY member
+  // checked into the op (the server gates `op.comms` on op membership, not leadership).
+  function renderComms(ctx){
+    const op = ctx && ctx.on_op ? ctx.op : null;
+    const board = op && op.comms;
+    if (!op || !board || !compShow('comms')){
+      const n = el('sect-comms'); if (n) n.remove(); return;
+    }
+    const chOpts = ['<option value="">Ready room</option>']
+      .concat((board.channels || []).map(c => `<option value="${esc(c.id)}">#${esc(c.name)}</option>`))
+      .join('');
+    const qaBtns = (board.quick_actions || []).map((a,i) =>
+      `<button class="ghost qa-btn" data-i="${i}">${esc(a.label || a.key)}</button>`).join(' ');
+    // Live ticker: last few ready-room messages, oldest first. Author + content are pushed as
+    // plain text from the server (never pre-rendered HTML) — always run them through esc() before
+    // inserting into the DOM.
+    const ticker = board.ticker || [];
+    const tickerHtml = ticker.length
+      ? `<div class="comm-ticker">${ticker.map(m =>
+          `<div class="tk-line"><b>${esc(m.author)}</b> ${esc(m.content)}</div>`).join('')}</div>`
+      : '<p class="muted">No recent room chatter.</p>';
+    const inner = `
+      ${tickerHtml}
+      <div class="comprow" style="margin-bottom:6px"><select id="comms-ch">${chOpts}</select></div>
+      <div class="comprow">${qaBtns}</div>
+      <div class="comprow" style="margin-top:8px">
+        <input id="comms-text" type="text" maxlength="300" placeholder="Message the room…" autocomplete="off">
+        <button id="comms-send" class="ghost">Send</button>
+      </div>`;
+    sectionWidget('comms', 'Comms', inner);
+    const sect = el('sect-comms'); if (!sect) return;
+    const chSel = sect.querySelector('#comms-ch');
+    const txt = sect.querySelector('#comms-text');
+    const channelOf = () => (chSel && chSel.value) ? chSel.value : null;
+    // Typing needs window focus, same as the Field Guide search box (escalate from passive only).
+    if (txt) txt.addEventListener('focus', () => { if (hudMode === 'passive') setModeRemote('interact'); });
+    (board.quick_actions || []).forEach((a,i) => {
+      const b = sect.querySelector(`.qa-btn[data-i="${i}"]`);
+      if (b) b.onclick = () => sendQuickAction(channelOf(), a.key).catch(()=>{});
+    });
+    const sendBtn = sect.querySelector('#comms-send');
+    const doSend = () => {
+      const val = (txt && txt.value || '').trim();
+      if (!val) return;
+      sendCommsText(channelOf(), val).then(() => { if (txt) txt.value = ''; }).catch(()=>{});
+    };
+    if (sendBtn) sendBtn.onclick = doSend;
+    if (txt) txt.addEventListener('keydown', e => { if (e.key === 'Enter') doSend(); });
+  }
+  // Member clip board: shown for ANY member checked into the op, but ONLY when the server says
+  // clip-triggering is available (`op.member_clips` is populated only then — voice.enabled AND a
+  // claimed pool bot; same gate re-checked server-side on every trigger). The lead additionally
+  // gets a policy selector; other members see the current policy as read-only text.
+  function renderMemberClips(ctx){
+    const op = ctx && ctx.on_op ? ctx.op : null;
+    const board = op && op.member_clips;
+    if (!op || !board || !compShow('memberclips')){
+      const n = el('sect-memberclips'); if (n) n.remove(); return;
+    }
+    const policyOpts = ['off','urgent','all'].map(p =>
+      `<option value="${p}"${p === board.policy ? ' selected' : ''}>${esc(p)}</option>`).join('');
+    const policyRow = op.is_lead
+      ? `<div class="comprow" style="margin-bottom:6px">Policy <select id="clip-policy">${policyOpts}</select></div>`
+      : `<div class="comprow muted" style="margin-bottom:6px">Policy: ${esc(board.policy)}</div>`;
+    const btns = (board.clips || []).length
+      ? board.clips.map((c,i) => `<button class="ghost mc-btn" data-i="${i}">${esc(c.label || c.key)}</button>`).join(' ')
+      : '<p class="muted">No clips available.</p>';
+    sectionWidget('memberclips', 'Clip board', `${policyRow}<div class="comprow">${btns}</div>`);
+    const sect = el('sect-memberclips'); if (!sect) return;
+    (board.clips || []).forEach((c,i) => {
+      const b = sect.querySelector(`.mc-btn[data-i="${i}"]`);
+      if (b) b.onclick = () => triggerMemberClip(c.key).catch(()=>{});
+    });
+    if (op.is_lead){
+      const sel = sect.querySelector('#clip-policy');
+      if (sel) sel.onchange = () => setClipPolicy(sel.value).catch(()=>{});
+    }
+  }
+  // ---- Op sources editor (C3.5): attach / detach a source, add / remove an ad-hoc step ----
+  //
+  // BUILT ONCE, UPDATED IN PLACE — the same rule the Field Guide follows, and for the same reason.
+  // sectionWidget() assigns `node.innerHTML` wholesale on every render, so a widget built through
+  // the normal path loses every stateful control it owns each time a context push lands (~15s, plus
+  // every op event). This editor owns TWO text inputs — a live source search and an ad-hoc step
+  // field — so it builds its shell exactly once and thereafter rewrites only `#se-body`. Neither
+  // input is inside `#se-body`; that separation IS the build-once property, not a layout accident.
+  //
+  // It is also self-managed in BOTH layout passes: renderData()'s end-of-pass cleanup removes every
+  // `sect-*` node it did not itself define, so `sect-opedit` must be in that exclusion list or it is
+  // deleted every 15s (the flap CLAUDE.md documents for sect-op/sect-squad/sect-roster).
+  let seState = { results: null };
+  let seTimer = null, seCtx = null;
+
+  // `can_edit_sources` is UX only — the server re-resolves lead + op-management on EVERY message, so
+  // hiding the editor hides nothing and showing it grants nothing. It just keeps the widget off the
+  // screen of members who could not use it.
+  const seCanEdit = ctx => !!(ctx && ctx.on_op && ctx.op && ctx.op.can_edit_sources);
+  const seSources = ctx => (ctx && ctx.op && ctx.op.sources) || [];
+  // The ad-hoc tail, derived from the RAIL rather than from `sources` — `SourceWire` collapses the
+  // whole tail into one entry with a count, but `RemoveAdhocStep{index}` addresses one step by its
+  // index WITHIN that tail. Enumerating the steps stamped `source_kind === 'adhoc'` is what turns a
+  // merged-rail row back into that tail-local index.
+  const seAdhoc = ctx => ((ctx && ctx.op && ctx.op.objectives) || [])
+    .filter(o => o.source_kind === 'adhoc');
+
+  // Detaching the LAST source only shortens the rail; detaching any earlier one renumbers every
+  // objective after it (the server remaps the live stage in the same transaction). Say which, on the
+  // button, before the click — `objective_count` is on the wire precisely so the HUD can.
+  function seDetachLabel(sources, i){
+    const after = sources.slice(i + 1).reduce((n, s) => n + (s.objective_count || 0), 0);
+    return after ? `Detach · renumbers ${after}` : 'Detach';
+  }
+
+  function seRender(){
+    const b = el('se-body'); if (!b) return;
+    const ctx = seCtx;
+    const srcs = seSources(ctx), adhoc = seAdhoc(ctx);
+    let h = '';
+    h += `<div class="fg-sec"><b>Attached</b>${srcs.length ? srcs.map((s,i) => {
+      // No detach control for the ad-hoc tail: it is not a row anyone attached, and its `id` is
+      // null on the wire. Its steps are removed individually below.
+      const btn = s.kind === 'adhoc' ? ''
+        : `<button class="ghost se-btn se-detach" data-kind="${esc(s.kind)}" data-id="${esc(s.id || '')}" data-i="${i}">${esc(seDetachLabel(srcs, i))}</button>`;
+      return `<div class="se-row"><span class="se-name">${i + 1}. ${esc(s.name)} <span class="muted">(${s.objective_count || 0})</span></span>${btn}</div>`;
+    }).join('') : '<p class="muted">Nothing attached.</p>'}</div>`;
+
+    if (adhoc.length)
+      h += `<div class="fg-sec"><b>Ad-hoc steps</b>${adhoc.map((o,i) =>
+        `<div class="se-row"><span class="se-name">${esc(o.label)}</span><button class="ghost se-btn se-rmadhoc" data-i="${i}">✕</button></div>`).join('')}</div>`;
+
+    const r = seState.results;
+    if (r){
+      const list = items => items.length
+        ? `<div class="fg-list">${items.map(x =>
+            `<button class="fg-item ghost se-attach" data-kind="${esc(x.kind)}" data-id="${esc(x.id)}">${esc(x.name)}</button>`).join('')}</div>`
+        : '<p class="muted">No matches.</p>';
+      h += `<div class="fg-sec"><b>Contracts</b>${list(r.contracts)}</div>`;
+      h += `<div class="fg-sec"><b>Field Guides</b>${list(r.guides)}</div>`;
+    }
+    b.innerHTML = h;
+
+    b.querySelectorAll('.se-detach').forEach(btn => btn.onclick = () => {
+      // Two-click confirm, same shape as Complete ✓: a mis-click here can renumber a live op's rail.
+      if (btn.dataset.armed !== '1'){ btn.dataset.armed = '1'; btn.textContent = 'Confirm?'; reportHitRects(); return; }
+      invoke('detach_source', { kind: btn.dataset.kind, id: btn.dataset.id }).catch(e => { btn.textContent = 'Failed'; btn.title = String(e); });
+    });
+    b.querySelectorAll('.se-attach').forEach(btn => btn.onclick = () =>
+      invoke('attach_source', { kind: btn.dataset.kind, id: btn.dataset.id }).catch(e => { btn.textContent = 'Failed'; btn.title = String(e); }));
+    b.querySelectorAll('.se-rmadhoc').forEach(btn => btn.onclick = () =>
+      invoke('remove_adhoc_step', { index: Number(btn.dataset.i) }).catch(e => { btn.textContent = '!'; btn.title = String(e); }));
+    // The body just gained/lost buttons; without this they are unclickable in display mode.
+    reportHitRects();
+  }
+
+  // Contracts come from the C3 search route, guides from the one the Field Guide already uses. Both
+  // are normalised to {kind, id, name} here so seRender() has one shape to draw.
+  //
+  // A guide's attach id is its SLUG — that is the guide's machine-facing id "as it appears in the
+  // search API" (`/api/codex/search` exposes slug, never the row uuid). A DETACH id is the uuid,
+  // because it comes from `SourceWire.id`. The two are deliberately different; do not "unify" them.
+  async function seSearch(){
+    clearTimeout(seTimer);
+    seTimer = setTimeout(async () => {
+      const q = (el('se-q') ? el('se-q').value : '').trim();
+      const [c, g] = await Promise.all([
+        getJson('/api/kb/contracts/search?q=' + encodeURIComponent(q)),
+        getJson('/api/codex/search?q=' + encodeURIComponent(q)),
+      ]);
+      // Tolerate either a bare array or an enveloped list, and either {name} or {title}.
+      const arr = v => Array.isArray(v) ? v : ((v && (v.contracts || v.results || v.items)) || []);
+      seState.results = {
+        contracts: arr(c).slice(0, 8).map(x => ({ kind: 'contract', id: String(x.id ?? x.slug ?? ''), name: x.name || x.title || '(unnamed)' })),
+        guides: ((g && g.guides) || []).slice(0, 8).map(x => ({ kind: 'guide', id: String(x.slug ?? x.id ?? ''), name: x.title || x.name || '(unnamed)' })),
+      };
+      seRender();
+    }, 300);
+  }
+
+  // Its own column, mirroring placeFieldGuide() exactly — including re-asserting `zoom` here, because
+  // a build-once widget never goes back through sectionWidget's `node.style.zoom = compScale(key)`
+  // and its size slider would otherwise move nothing until the next restart.
+  function placeSourceEditor(){
+    const n = el('sect-opedit'); if (!n) return;
+    n.style.zoom = compScale('opedit');
+    const z = zoomOf(n);
+    applyPos(n, 'sect-opedit', [colX.edit() / z, COL_TOP / z]);
+  }
+  function ensureSourceEditor(ctx){
+    seCtx = ctx || seCtx;
+    if (!compShow('opedit') || !seCanEdit(seCtx)){ const n = el('sect-opedit'); if (n) n.remove(); return; }
+    if (el('sect-opedit')){ seRender(); placeSourceEditor(); return; } // built once; updated in place
+    sectionWidget('opedit', 'Op sources',
+      `<input id="se-q" class="fg-input" placeholder="Search contracts &amp; guides…" autocomplete="off">`
+      + `<div id="se-body"></div>`
+      + `<div class="se-add"><input id="se-adhoc" class="fg-input" placeholder="Add a step…" autocomplete="off">`
+      + `<button id="se-add" class="se-btn">Add</button></div>`);
+    placeSourceEditor();
+    const q = el('se-q');
+    if (q){
+      // Typing needs window focus — clicking the box pops interact mode (Esc/Done exits).
+      q.addEventListener('focus', () => { if (hudMode === 'passive') setModeRemote('interact'); });
+      q.addEventListener('input', seSearch);
+    }
+    const a = el('se-adhoc'), add = el('se-add');
+    const submit = () => {
+      const label = (a && a.value || '').trim();
+      if (!label) return;
+      invoke('add_adhoc_step', { label }).then(() => { a.value = ''; }).catch(e => { if (add){ add.textContent = 'Failed'; add.title = String(e); } });
+    };
+    if (a){
+      a.addEventListener('focus', () => { if (hudMode === 'passive') setModeRemote('interact'); });
+      a.addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); submit(); } });
+    }
+    if (add) add.onclick = submit;
+    seRender();
+  }
+
+  let lastCtx = null;
+  function renderContext(ctx){
+    lastCtx = ctx || lastCtx;
+    renderOp(lastCtx); renderSquad(lastCtx); renderRoster(lastCtx);
+    renderNowPlaying(lastCtx); renderMusicControls(lastCtx); renderSoundboard(lastCtx);
+    renderComms(lastCtx); renderMemberClips(lastCtx);
+    // Stack any unpositioned context widget into the PUSH column — its own column, clear of the REST
+    // column renderData() builds. Widgets that are hidden or absent are simply skipped, so they leave
+    // no gap; a user-dragged widget takes its saved position and drops out of the column entirely.
+    colRight.push = stackColumn(
+      ['op','squad','roster','nowplaying','music','soundboard','comms','memberclips'].map(k => 'sect-' + k),
+      colX.push());
+    placeFieldGuide();   // its column start just moved with this one
+    // The source editor is push-driven too (it reads `op.sources` / `op.can_edit_sources`), but it is
+    // built once — so this UPDATES it in place rather than re-rendering it, and never touches its
+    // two text inputs.
+    ensureSourceEditor(lastCtx);
+    placeSourceEditor();
+    reportHitRects();
+  }
+
+  async function renderData(){
+    if (!perms.length && !(await invoke('auth_status').catch(()=>null))){ return; }
+    const defs = [];
+    const add = (key, title, inner) => { if (inner != null) defs.push([key, title, inner]); };
+    if (compShow('standing')){ const s = await getJson('/api/me/standing'); if (s) add('standing','My standing', rows(s.map(x => [x.division, `${x.rank ?? '—'} · L${x.level} · ${x.total_merits} merits`]))); }
+    if (compShow('ops')){ const e = await getJson('/api/events'); if (e){
+      const items = e.slice(0,6).map(x => {
+        const when = esc(new Date(x.starts_at*1000).toLocaleString());
+        // A live op gets a one-tap check-in button — UNLESS the member is already on it (the member
+        // socket says `on_op` for that op). Without this, the REST poll re-shows "Check in" every 15s
+        // even after checking in, so the state looks like it keeps resetting.
+        if (x.status === 'live') {
+          const onThis = lastCtx && lastCtx.on_op && lastCtx.op && lastCtx.op.name === x.name;
+          return onThis
+            ? `<div class="row"><span>🔴 ${esc(x.name)}</span><span class="v ok">✓ Checked in</span></div>`
+            : `<div class="row"><span>🔴 ${esc(x.name)}</span><button class="checkin-btn" data-ev="${esc(x.id)}">Check in</button></div>`;
+        }
+        return `<div class="row"><span>${esc(x.name)}</span><span class="v">${when}</span></div>`;
+      }).join('') || '<p class="muted">Nothing scheduled.</p>';
+      add('ops','Upcoming ops', items);
+    } }
+    if (compShow('proposals')){ const p = await getJson('/api/governance/proposals'); if (p) add('proposals','Open proposals', rows(p.slice(0,6).map(x => [x.title, x.tier.replace('_',' ')]))); }
+    if (compShow('elections')){ const e = await getJson('/api/elections'); if (e) add('elections','Elections', rows(e.slice(0,6).map(x => [x.title, x.status]))); }
+    if (compShow('fleet')){ const f = await getJson('/api/fleet'); if (f) add('fleet','Fleet', rows(f.slice(0,8).map(x => [x.name, `${x.status} · ${x.location}`]))); }
+    if (compShow('treasury') && perms.includes('treasury.view')){ const t = await getJson('/api/treasury'); if (t) add('treasury','Treasury', `<div class="row"><span>Balance</span><span class="v">${fmtAuec(t.balance)}</span></div>${rows((t.recent||[]).slice(0,5).map(r => [r.kind, fmtAuec(r.amount)]))}`); }
+    if (compShow('budget') && perms.includes('treasury.view')){ const b = await getJson('/api/budget'); if (b && b.budgets) add('budget','Budget', rows(b.budgets.slice(0,6).map(x => [x.label, fmtAuec(x.remaining) + ' left']))); }
+
+    // Render, then stack any section without a saved position into the REST column. Same rules as the
+    // push column in renderContext(): saved position wins and leaves the column, absent widgets leave
+    // no gap.
+    defs.forEach(([k,t,inner]) => sectionWidget(k, t, inner));
+    colRight.rest = stackColumn(defs.map(([k]) => 'sect-' + k), colX.rest());
+    // Drop only REST-managed widgets that are no longer present. op/squad/roster are push-driven
+    // (owned by renderContext over the member socket); removing them here makes the live op flap —
+    // this REST refresh would delete them between the 15s context pushes that re-create them.
+    // op/squad/roster/nowplaying/music/soundboard/comms/memberclips are push-driven; fieldguide
+    // and opedit are self-managed (stateful, built once) — none of them are in `defs`, so exclude
+    // them from the REST cleanup or they'd be wiped every poll.
+    const selfManaged = id => id === 'sect-op' || id === 'sect-squad' || id === 'sect-roster' || id === 'sect-fieldguide' || id === 'sect-opedit' || id === 'sect-nowplaying' || id === 'sect-music' || id === 'sect-soundboard' || id === 'sect-comms' || id === 'sect-memberclips';
+    Array.from(document.querySelectorAll('[id^="sect-"]')).forEach(n => {
+      if (!selfManaged(n.id) && !defs.some(([k]) => 'sect-' + k === n.id)) n.remove();
+    });
+    ensureFieldGuide();
+    placeFieldGuide();   // the REST column just re-measured, which can shift every column right of it
+    ensureSourceEditor(lastCtx);
+    placeSourceEditor();  // its column starts one width right of the guide's, which just moved
+    // Wire any check-in buttons rendered into the upcoming-ops widget. Surface failures on the button
+    // (don't swallow them) so "not connected to the live channel" etc. is visible — checking in needs
+    // the member socket, which the server only opens when the member has run `/link on`.
+    Array.from(document.querySelectorAll('.checkin-btn')).forEach(b => {
+      b.onclick = () => {
+        const prev = b.textContent; b.textContent = '…'; b.disabled = true;
+        invoke('check_in', { event: b.dataset.ev })
+          .then(() => { b.textContent = '✓'; })
+          .catch(e => { b.textContent = prev; b.disabled = false; b.title = 'Check-in failed: ' + e; });
+      };
+    });
+    reportHitRects();
+  }
+
+  // ---- control bar ----
+  function setActs(authed){
+    el('acts').innerHTML = authed
+      ? '<button id="b-refresh" class="ghost">Refresh</button><button id="b-logout" class="ghost">Log out</button>'
+      : '<button id="b-login">Log in</button>';
+    const on = (id, fn) => { const b = el(id); if (b) b.onclick = fn; };
+    on('b-login', () => invoke('login'));
+    on('b-refresh', refreshAll);
+    on('b-logout', async () => { await invoke('logout'); refreshAll(); });
+  }
+  async function refreshAll(){
+    const status = await invoke('auth_status').catch(() => null);
+    if (status){ perms = status.permissions || []; el('who').textContent = '#' + status.discord_id; setActs(true); await renderData(); }
+    else { perms = []; el('who').textContent = ''; setActs(false); Array.from(document.querySelectorAll('[id^="sect-"]')).forEach(n => n.remove()); }
+  }
+
+  // ---- settings ----
+  let settingsOpen = false;
+  function showSettings(on){
+    settingsOpen = on; el('settings').classList.toggle('show', on); el('gear').textContent = on ? '✕' : '⚙';
+    if (on){ populateForm(cfg); applyPos(el('settings'), 'settings', [window.innerWidth/2 - 180, 80]); }
+    // Closing the panel must disarm any in-flight rebind — an armed capture keeps the Rust hook
+    // suspended, so leaving it armed behind a closed panel would look exactly like "the hotkeys
+    // stopped working" until the 10s watchdog fired.
+    else if (capturingKey) { setCapture(null); keyMsg(''); }
+    // Opening/closing the panel swaps a screenful of controls in and out of the hit-rect report.
+    reportHitRects();
+  }
+  // Purely presentational clustering of COMPS for the Widgets tab. The persisted shape is unchanged —
+  // `components` is still a flat map keyed by the COMPS keys; these groups only decide which heading a
+  // row is drawn under. Every key must appear in exactly one group: a key with no row would be absent
+  // from the DOM, and saveFromForm() rebuilds the whole map from the DOM, so it would be silently
+  // written back as its default. Pinned by the Rust guard `settings_groups_cover_every_component`.
+  // Starting points, not modes: applying one writes the `components` map and the user carries on
+  // editing. Every widget defaults to SHOWN, so a new user currently meets all 18 at once and has to
+  // subtract — which is a poor first run and the reason these exist.
+  //
+  // Listed keys are shown, everything else hidden. Keys are checked against COMPS by a guard test,
+  // so a preset naming a widget that no longer exists fails the build rather than silently showing
+  // one fewer thing than it claims.
+  const COMP_PRESETS = [
+    ['Lead', 'Running an op: objectives, squad, the audio you drive and the room you talk to.',
+      ['op','squad','roster','opedit','nowplaying','music','soundboard','comms']],
+    ['Member', 'On an op someone else leads: what is happening, who is here, and your way to speak up.',
+      ['op','squad','roster','nowplaying','comms','memberclips','standing']],
+    ['Minimal', 'Just the op. Everything else off.',
+      ['op','squad']],
+  ];
+
+  const COMP_GROUPS = [
+    ['Live op',       ['op','squad','roster','opedit']],
+    ['Audio & media', ['nowplaying','music','soundboard']],
+    ['Comms',         ['comms','memberclips']],
+    ['Org & status',  ['standing','ops','proposals','elections','fleet','treasury','budget']],
+    ['Reference',     ['card','fieldguide']],
+  ];
+  // The min/max/step are INTERPOLATED from the canonical constants, never written out again here: the
+  // corner-drag gesture clamps to the same three, and a slider whose range drifted below the drag's
+  // would silently clamp a dragged scale back on the next settings save. See the SCALE_MIN comment.
+  function compRow(k, label){
+    return `<div class="comprow"><label><input type="checkbox" data-show="${k}"> ${esc(label)}</label>`
+         + `<input type="range" data-scale="${k}" min="${SCALE_MIN}" max="${SCALE_MAX}" step="${SCALE_STEP}"`
+         + ` title="Size — same control as dragging this widget's corner"></div>`;
+  }
+  function buildCompList(){
+    const labels = new Map(COMPS);
+    const used = new Set();
+    let html = '';
+    const group = (title, keys) => {
+      const body = keys.filter(k => labels.has(k)).map(k => { used.add(k); return compRow(k, labels.get(k)); }).join('');
+      if (body) html += `<div class="set-group"><b>${esc(title)}</b><div class="checks">${body}</div></div>`;
+    };
+    COMP_GROUPS.forEach(([title, keys]) => group(title, keys));
+    // Runtime safety net for the same hazard the guard test pins: a COMPS entry that nobody grouped
+    // still gets a row (under "Other") rather than vanishing from the form and losing its setting.
+    group('Other', COMPS.map(([k]) => k).filter(k => !used.has(k)));
+    el('comp-list').innerHTML = html;
+    el('comp-list').addEventListener('change', saveFromForm);
+    buildPresets();
+  }
+
+  /** Render the preset buttons. Idempotent — buildCompList() may run more than once. */
+  function buildPresets(){
+    const host = el('preset-btns'); if (!host) return;
+    host.innerHTML = '';
+    for (const [name, why, keys] of COMP_PRESETS) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = name; b.title = why;
+      b.addEventListener('click', () => applyPreset(keys));
+      host.appendChild(b);
+    }
+  }
+
+  /** Show exactly `keys`, hide the rest, then save through the normal form path.
+   *
+   * Writes the CHECKBOXES and lets saveFromForm() build the config, rather than writing the config
+   * directly — so a preset cannot drift from what the form would have produced, and `components`
+   * keeps the open-map behaviour that lets an unknown key survive (PR #29).
+   */
+  function applyPreset(keys){
+    const want = new Set(keys);
+    COMPS.forEach(([k]) => {
+      const sh = document.querySelector(`[data-show="${k}"]`);
+      if (sh) sh.checked = want.has(k);
+    });
+    saveFromForm();
+  }
+  // Tabs are a visibility switch, nothing more: panes keep their rows in the document so
+  // populateForm()/saveFromForm() can still find every [data-show]/[data-scale] control.
+  function showTab(name){
+    document.querySelectorAll('#settings .set-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
+    document.querySelectorAll('#settings .set-pane').forEach(p => p.classList.toggle('on', p.dataset.pane === name));
+    // The visible control set just changed; a hidden pane's controls collapse to 0×0 and drop out of
+    // the report. Re-report now instead of waiting up to 500ms for the interval.
+    reportHitRects();
+  }
+  // ---- rebinding ----
+  // The action currently waiting for a combo, or null. While non-null the Rust hook is SUSPENDED
+  // (`set_key_capture`): otherwise pressing the interact combo to *describe* it also *fires* it,
+  // which switches out of settings mode and closes the panel being rebound from. Rust also runs a
+  // 10s watchdog on that flag, so a reload mid-capture cannot leave the hotkeys dead.
+  let capturingKey = null;
+  function keyMsg(text){
+    const n = el('key-msg'); if (!n) return;
+    n.innerHTML = text || 'Click a combo to rebind it. Needs <kbd>Ctrl</kbd> or <kbd>Alt</kbd>; use the <b>left-hand</b> ones.';
+  }
+  function renderKeys(){
+    const all = keysOf(cfg);
+    el('key-list').innerHTML = KEY_ACTIONS.map(([k, label, desc]) => {
+      const arming = capturingKey === k;
+      return `<div class="keyrow"><span class="k">`
+        + `<button class="keybind${arming ? ' arming' : ''}" data-bind="${k}" title="Click, then press the new combo (Esc cancels)">`
+        + `${esc(arming ? 'Press a combo…' : bindLabel(all[k]))}</button></span>`
+        + `<span><b>${esc(label)}</b> — ${desc}</span></div>`;
+    }).join('');
+    // The buttons just appeared/changed size, so their hit boxes are stale for up to 500ms.
+    reportHitRects();
+  }
+  function setCapture(action){
+    capturingKey = action;
+    invoke('set_key_capture', { capturing: !!action }).catch(() => {});
+    renderKeys();
+  }
+  // CAPTURE phase, so this runs before the bubble-phase Esc handler that exits interactive mode —
+  // Esc has to be able to cancel a rebind without also throwing the user out of settings.
+  document.addEventListener('keydown', e => {
+    if (!capturingKey) return;
+    const code = e.code || '';
+    if (isModifierCode(code)) return;   // still assembling the combo — wait for the real key
+    e.preventDefault(); e.stopPropagation();
+    const action = capturingKey;
+    if (code === 'Escape'){ setCapture(null); keyMsg(''); return; }
+    // AltGr is NOT a usable modifier: Windows synthesises a phantom left Ctrl beside it, so the
+    // browser (and the Rust hook) both see plain Ctrl+Alt. Accepting it would store a binding the
+    // hook deliberately refuses to fire — and, worse, one that WOULD fire on every accented
+    // character if that refusal were ever relaxed. Reject at the door and say why.
+    if (e.getModifierState && e.getModifierState('AltGraph')){
+      setCapture(null);
+      keyMsg('AltGr can’t be used — Windows reports it as Ctrl+Alt, so the binding would fire whenever you typed € é á í ó ú ¦. Use the left-hand Ctrl and Alt.');
+      return;
+    }
+    const b = { vk: codeToVk(code), ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey };
+    const all = keysOf(cfg);
+    const err = bindError(b, action, all);
+    if (err){ setCapture(null); keyMsg(err); return; }
+    all[action] = b;
+    cfg.keys = all;
+    setCapture(null);
+    keyMsg('Bound ' + bindLabel(b) + ' to “' + (KEY_ACTIONS.find(a => a[0] === action) || [,''])[1] + '”.');
+    persist();
+  }, true);
+
+  function populateForm(c){
+    if (!c) return;
+    renderKeys();
+    el('s-server').value = c.server_url || ''; el('s-theme').value = c.theme || 'stanton';
+    el('s-scale').value = c.scale || 1.0; el('s-scaleval').textContent = (c.scale || 1.0).toFixed(2) + '×';
+    // `|| ` would turn a deliberate 0% ("no tint") back into the default — tintOf() treats only a
+    // missing/NaN value as "unset".
+    el('s-tint').value = tintOf(c); el('s-tintval').textContent = Math.round(tintOf(c)) + '%';
+    el('s-autostart').checked = !!c.start_on_login; el('s-autohide').checked = c.auto_hide !== false; el('s-mediakeys').checked = c.media_keys === true; el('s-localapi').checked = c.local_api === true; el('s-localport').textContent = c.local_api_port || 48291; syncLocalKeyRow();
+    const comps = c.components || {};
+    COMPS.forEach(([k]) => { const cc = comps[k] || { show:true, scale:1.0 };
+      const sh = document.querySelector(`[data-show="${k}"]`); if (sh) sh.checked = cc.show !== false;
+      const sc = document.querySelector(`[data-scale="${k}"]`); if (sc) sc.value = cc.scale || 1.0; });
+  }
+  async function saveFromForm(){
+    // SEED from the saved map, then overwrite only the keys this build knows about. `components` is
+    // an OPEN map on the Rust side precisely so a widget added later round-trips without a struct
+    // change (PR #29) — rebuilding it from the COMPS constant alone reintroduces that bug from the
+    // other direction, dropping any key this build has never heard of (an older/newer config, or a
+    // key written by a future version) the first time the user ticks a checkbox.
+    const components = Object.assign({}, (cfg && cfg.components) || {});
+    COMPS.forEach(([k]) => { const sh = document.querySelector(`[data-show="${k}"]`), sc = document.querySelector(`[data-scale="${k}"]`);
+      components[k] = { show: sh ? sh.checked : true, scale: sc ? parseFloat(sc.value) : 1.0 }; });
+    const scale = parseFloat(el('s-scale').value);
+    cfg = {
+      server_url: (el('s-server').value.trim() || 'http://localhost:8080'),
+      theme: el('s-theme').value, corner: (cfg && cfg.corner) || 'bottom-left',
+      // An unpopulated slider reads '' → NaN → a config that serialises `null` and resets the zoom.
+      scale: Number.isFinite(scale) ? scale : 1.0,
+      start_on_login: el('s-autostart').checked,
+      auto_hide: el('s-autohide').checked, media_keys: el('s-mediakeys').checked, local_api: el('s-localapi').checked, local_api_port: (cfg && cfg.local_api_port) || 48291, components,
+      // The interact tint HAS a form control, so it is read straight back out of the DOM — but it
+      // still has to be NAMED here. Omit it and this literal drops it, Rust's serde default puts it
+      // back at 30% on the next load, and the user's chosen tint quietly resets. Same NaN guard as
+      // `scale`: tintOf() falls back to the default rather than serialising null.
+      tint_opacity: tintOf({ tint_opacity: el('s-tint').value }),
+      // CARRY-OVER, NOT OPTIONAL. This object is rebuilt from scratch out of the DOM on every single
+      // settings change, so any persisted key that is not named right here is silently destroyed the
+      // next time the user ticks a checkbox. `positions` and `sizes` have no form controls — they are
+      // written by dragging — so they must be copied across explicitly. Pinned by the Rust guard
+      // `widget_sizes_and_positions_survive_a_settings_save`.
+      positions: (cfg && cfg.positions) || {},
+      sizes: (cfg && cfg.sizes) || {},
+      // Same carry-over hazard, one step worse: the hotkeys have no control on THIS form (they are
+      // rebound by capture on the Keys tab), so omitting them here would reset all three to the
+      // defaults the moment the user ticked any checkbox — and the user would have no idea why the
+      // keys they set stopped working. keysOf() rather than a bare `cfg.keys` so a config that
+      // predates the field still writes a complete set instead of a hole.
+      keys: keysOf(cfg),
+    };
+    el('s-scaleval').textContent = cfg.scale.toFixed(2) + '×';
+    applyConfig(cfg, true); persist();
+  }
+
+  // ---- apply config ----
+  function applyCard(){ el('card').classList.toggle('hidden', !compShow('card')); el('card').style.zoom = compScale('card'); }
+  function applyConfig(c, fromForm){
+    if (!c) return; cfg = c;
+    applyTheme(c.theme || 'stanton'); applyTint(tintOf(c)); applyCard();
+    applyPos(el('card'), 'card', [16, 16]);
+    const ns = (c.server_url || '').replace(/\/+$/, ''); if (ns && ns !== SERVER){ SERVER = ns; reconnect(); }
+    if (!fromForm && settingsOpen) populateForm(c);
+    renderData();
+    // Push-driven widgets (op/squad/roster/nowplaying/music/soundboard/comms/memberclips) are
+    // drawn by renderContext, not renderData — re-run it so a component toggle/scale takes effect
+    // immediately instead of waiting for the next ~15s context push.
+    if (lastCtx) renderContext(lastCtx);
+  }
+
+  // Single entry point for the three modes; Rust is the source of truth and pushes `hud:mode`.
+  // The two body classes are what the stylesheet keys off, and they nest deliberately:
+  //   passive  → neither class    (no scrim box at all — the game is untouched)
+  //   interact → .interactive     (theme tint + scrim, widgets outlined/draggable/resizable)
+  //   settings → .interactive AND .settings  (same, minus the scrim: `content:none` cancels the box,
+  //                                           so the game shows through untinted while you configure)
+  // Settings therefore reuses every interact rule and overrides exactly one thing, so the two modes
+  // cannot drift apart visually. `body.settings` never appears without `body.interactive`.
+  function setMode(m){
+    hudMode = (m === 'interact' || m === 'settings') ? m : 'passive';
+    interactive = hudMode !== 'passive';
+    document.body.classList.toggle('interactive', interactive);
+    document.body.classList.toggle('settings', hudMode === 'settings');
+    el('control').classList.toggle('show', interactive);
+    applyPos(el('control'), 'control', [16, window.innerHeight - 60]);
+    if (interactive){ refreshAll(); pollTimer = pollTimer || setInterval(() => refreshAll(), 20000); }
+    // The settings surface IS settings mode — one state, not a panel that can be open in the wrong
+    // mode (which would leave the backdrop and the panel able to disagree).
+    showSettings(hudMode === 'settings');
+    // #control and #settings are now reported as hit rects (they show only in a capturing mode), so
+    // re-report on the transition rather than letting their boxes go stale for up to 500ms — a
+    // stale box makes the overlay capture clicks over empty space after returning to passive.
+    reportHitRects();
+  }
+
+  // ---- escape hatches (independent of the global OS hotkey, which apps/games can swallow) ----
+  // In interact AND settings mode the overlay window holds focus, so it reliably receives this
+  // keydown. Esc drops all the way back to pass-through passive display from EITHER mode in one
+  // press — deliberately not a two-step (settings → interact → passive), so a single Esc is always
+  // a complete exit no matter which mode the user got stuck in and even if the hotkeys never reach
+  // us. The Done ✕ button and every tray item are the other two hotkey-independent routes.
+  function leaveInteractive(){ if (interactive) setModeRemote('passive'); }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') leaveInteractive(); });
+
+  // The mode combos, handled HERE as well as by the Rust hook — because in a capturing mode the Rust
+  // hook cannot see them. Measured 2026-08-02: while the overlay owns the OS foreground, Windows
+  // stops dispatching keystrokes to this process's own low-level keyboard hook (see `focus_plan` in
+  // main.rs). Interact and Settings are exactly the modes that must hold focus, for Esc — so
+  // "press the combo again to come back out" is dead in precisely the two states where a user
+  // reaches for it, and it fails silently.
+  //
+  // The overlay's webview DOES receive these keystrokes in those modes (that is the same fact the
+  // Esc hatch above rests on), so the frontend can complete the round trip. Rust stays the source of
+  // truth: this only calls `set_mode`, with the SAME transition table (`next_mode`) — pressing the
+  // mode you are in returns to passive, pressing the other switches straight to it.
+  //
+  // Passive is deliberately NOT handled here: there the hook works, the overlay is click-through and
+  // unfocusable, and the webview is not receiving keys at all.
+  document.addEventListener('keydown', e => {
+    if (!interactive || capturingKey) return;          // rebind capture owns the keyboard
+    // AltGr reports as Ctrl+Alt on Windows; the Rust matcher vetoes it and so must this one, or the
+    // two disagree about the same keystroke. Same rule as `binding_matches`.
+    if (e.getModifierState && e.getModifierState('AltGraph')) return;
+    const vk = codeToVk(e.code || '');
+    if (!vk) return;
+    const pressed = { vk, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey };
+    const all = keysOf(cfg);
+    for (const action of ['interact', 'settings']){
+      if (sameBind(all[action], pressed)){
+        e.preventDefault();
+        setModeRemote(hudMode === action ? 'passive' : action);
+        return;
+      }
+    }
+  });
+
+  // ---- hover-to-click ----
+  // Report the clickable controls' boxes (physical px) to Rust, which flips the overlay out of
+  // click-through only while the cursor is over one — so buttons work in-game without arrange mode.
+  // Every interactive control ANYWHERE under #overlay — not just inside `.sect` widgets. Anything
+  // this selector misses is unclickable in display mode: the overlay never drops click-through over
+  // it, so the click falls through to the game and the control only works in arrange mode (which
+  // drops click-through globally). That is exactly how the whole control bar (#control: gear, Done),
+  // the entire #settings panel and every `<select>` — the Bed mood switch, Comms channel picker,
+  // clip-policy picker — used to be dead. Keep it in sync with the tags the UI actually uses; a
+  // Rust guard test (`hit_rect_selector_covers_every_overlay_control`) pins it.
+  const HIT_SELECTOR = '#overlay button, #overlay input, #overlay select, #overlay textarea, #overlay a';
+  function reportHitRects(){
+    if (!T) return;
+    const dpr = window.devicePixelRatio || 1;
+    const rects = [];
+    // Hidden controls collapse to a 0×0 box (display:none) and are filtered out below, so a closed
+    // settings panel or control bar contributes nothing.
+    document.querySelectorAll(HIT_SELECTOR).forEach(el => {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) rects.push([r.left*dpr, r.top*dpr, r.width*dpr, r.height*dpr]);
+    });
+    invoke('set_hit_rects', { rects }).catch(() => {});
+  }
+  setInterval(reportHitRects, 500);
+  window.addEventListener('resize', reportHitRects);
+
+  // ---- init ----
+  buildCompList();
+  document.querySelectorAll('#settings .set-tab').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+  el('done').onclick = leaveInteractive;
+  // The gear is the mouse route between the two capturing modes, so it goes through Rust like the
+  // hotkey does rather than toggling the panel locally — otherwise the panel could be open without
+  // the opaque backdrop (or vice versa) and the two would drift.
+  el('gear').onclick = () => setModeRemote(hudMode === 'settings' ? 'interact' : 'settings');
+  // "Reset layout" must clear BOTH halves of a widget's box — a cleared position with a kept size
+  // leaves the widgets back in their default columns but still stretched to whatever the user dragged.
+  // `await` is load-bearing: persist() is an async IPC round-trip, so an unawaited save races
+  // location.reload() tearing the page down and the reset silently does nothing.
+  el('b-reset').onclick = async () => { cfg.positions = {}; cfg.sizes = {}; await persist(); location.reload(); };
+  // Rebinding: click a combo to arm, press the new one. The RESET is the recovery path — a user who
+  // binds something their keyboard cannot produce must be able to get back without hand-editing
+  // config.json, and the ⚙ button and every tray item still reach this panel with no hotkey at all.
+  el('key-list').addEventListener('click', e => {
+    const b = e.target.closest('[data-bind]');
+    if (b) { keyMsg('Press the new combo… (Esc cancels)'); setCapture(b.dataset.bind); }
+  });
+  el('b-keyreset').onclick = () => {
+    setCapture(null);
+    cfg.keys = keysOf(null);          // keysOf with no source yields exactly KEY_DEFAULTS
+    keyMsg('Keys reset to Ctrl+Alt+X / C / Z.');
+    renderKeys();
+    persist();
+  };
+  ['s-server','s-theme','s-scale','s-tint','s-autostart','s-autohide','s-mediakeys','s-localapi'].forEach(id => { const e = el(id); if (e) e.addEventListener('change', saveFromForm); });
+  // The pairing key is only meaningful once the API is on, and is fetched lazily so merely opening
+  // Settings does not mint one.
+  async function syncLocalKeyRow() {
+    const on = el('s-localapi') && el('s-localapi').checked;
+    const row = el('s-localkeyrow'); if (!row) return;
+    row.hidden = !on;
+    if (!on) return;
+    // The toggle is read once at startup, so "enabled" and "actually listening" differ for the
+    // whole window between ticking it and restarting. Saying so beats letting someone copy a key
+    // and paste it into a tool that then cannot connect — which is exactly what happened first time.
+    let live = false;
+    try { live = await invoke('local_api_listening'); } catch (e) { live = false; }
+    const st = el('s-localstate');
+    if (st) {
+      st.textContent = live ? '— active' : '— restart the HUD to activate';
+      st.style.color = live ? 'var(--ok, #6ea)' : 'var(--warn, #e9a)';
+    }
+    try { el('s-localkey').value = await invoke('local_api_token'); } catch (e) { el('s-localkey').value = '(unavailable)'; }
+  }
+  if (el('s-localapi')) el('s-localapi').addEventListener('change', syncLocalKeyRow);
+  if (el('s-localcopy')) el('s-localcopy').addEventListener('click', () => { const f = el('s-localkey'); f.select(); try { document.execCommand('copy'); } catch (e) {} });
+  if (el('s-localrevoke')) el('s-localrevoke').addEventListener('click', async () => {
+    try { await invoke('local_api_revoke'); el('s-localkey').value = ''; await syncLocalKeyRow(); } catch (e) {}
+  });
+  el('s-scale').addEventListener('input', () => { el('s-scaleval').textContent = parseFloat(el('s-scale').value).toFixed(2) + '×'; });
+  // LIVE, on `input` — not just on the `change`/save above. The whole point of this slider is to
+  // judge the tint against the game behind it, which is impossible if the scrim only moves once the
+  // drag ends. `change` still fires on release and is what persists it.
+  el('s-tint').addEventListener('input', () => applyTint(tintOf({ tint_opacity: el('s-tint').value })));
+  makeDraggable(el('card'), 'card');
+  makeDraggable(el('control'), 'control');
+  makeDraggable(el('settings'), 'settings');
+
+  // The config the frontend falls back to when Rust can't hand one over. It must be COMPLETE and it
+  // must reach populateForm — see init().
+  const defaultCfg = () => ({
+    server_url: SERVER, start_on_login: false, theme: currentTheme, corner: 'bottom-left',
+    scale: 1.0, components: {}, auto_hide: true, media_keys: false, local_api: false, local_api_port: 48291, positions: {}, sizes: {},
+    tint_opacity: TINT_DEFAULT, keys: keysOf(null),
+  });
+  (async function init(){
+    let c = null;
+    try { c = await invoke('get_config'); } catch (e) { console.error('HUD: get_config failed:', e); }
+    if (c){ cfg = c; SERVER = (c.server_url || SERVER).replace(/\/+$/, ''); applyTheme(c.theme || 'stanton'); applyTint(tintOf(c)); applyCard(); applyPos(el('card'), 'card', [16,16]); populateForm(c); }
+    else {
+      // FAIL SAFE, not fail blank. If get_config throws, the form is still sitting at its markup
+      // defaults — every checkbox unchecked, the scale slider empty — and saveFromForm() rebuilds
+      // the whole config from exactly those controls. So the next time the user touched ANY setting
+      // it wrote `show:false` for all 17 widgets and a junk scale, blanking the entire HUD. Seed a
+      // real default and populate the form from it, so a failed read can only ever cost preferences
+      // that were already unreachable.
+      cfg = defaultCfg();
+      applyTheme(cfg.theme); applyTint(tintOf(cfg)); applyCard(); applyPos(el('card'), 'card', [16,16]); populateForm(cfg);
+    }
+    connect();
+    refreshAll(); // show member data in display mode too (read-only), if signed in
+  })();
+
+  if (T){
+    listen('hud:mode', e => setMode(e.payload));
+    listen('hud:authed', () => refreshAll());
+    listen('hud:config', e => applyConfig(e.payload, false));
+    listen('hud:context', e => { ctxStale = false; renderContext(e.payload); });
+    listen('hud:context-stale', () => { ctxStale = true; if (lastCtx) renderContext(lastCtx); });
+  }
+</script>
+</body>
+</html>

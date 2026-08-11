@@ -1,0 +1,155 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+  "Name": "Org HUD",
+  "Version": "1.0.0.0",
+  "Author": "TheCodeSaiyan",
+  "URL": "https://github.com/TheCodeSaiyan/orgplatform",
+  "Description": "Run a live op from your Stream Deck: check in, advance objectives, control the music bed and fire soundboard clips. Requires the Org HUD desktop app with its local control API enabled.",
+  "Category": "Org HUD",
+  "Icon": "imgs/plugin",
+  "CategoryIcon": "imgs/plugin",
+  "CodePath": "bin/plugin.js",
+  "Nodejs": {
+    "Version": "24"
+  },
+  "SDKVersion": 3,
+  "Software": {
+    "MinimumVersion": "6.9"
+  },
+  "OS": [
+    { "Platform": "windows", "MinimumVersion": "10" },
+    { "Platform": "mac", "MinimumVersion": "12" }
+  ],
+  "ApplicationsToMonitor": {
+    "windows": ["orghud.exe", "StarCitizen.exe"],
+    "mac": ["com.thecodesaiyan.orghud"]
+  },
+  "Actions": [
+    {
+      "UUID": "com.thecodesaiyan.orghud.checkin",
+      "Name": "Check In",
+      "Tooltip": "Check in to the live op.",
+      "Icon": "imgs/action",
+      "PropertyInspectorPath": "ui/inspector.html",
+      "Controllers": ["Keypad"],
+      "States": [
+        { "Image": "imgs/key", "TitleAlignment": "bottom", "Title": "Check In" }
+      ]
+    },
+    {
+      "UUID": "com.thecodesaiyan.orghud.ready",
+      "Name": "Ready Toggle",
+      "Tooltip": "Toggle your ready state for the live op.",
+      "Icon": "imgs/action",
+      "PropertyInspectorPath": "ui/inspector.html",
+      "Controllers": ["Keypad"],
+      "States": [
+        { "Image": "imgs/key", "Title": "Not Ready" },
+        { "Image": "imgs/key", "Title": "Ready" }
+      ]
+    },
+    {
+      "UUID": "com.thecodesaiyan.orghud.objective.next",
+      "Name": "Objective Next",
+      "Tooltip": "Advance the op to the next objective. Lead only.",
+      "Icon": "imgs/action",
+      "PropertyInspectorPath": "ui/inspector.html",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/key", "Title": "Obj +" }]
+    },
+    {
+      "UUID": "com.thecodesaiyan.orghud.objective.prev",
+      "Name": "Objective Previous",
+      "Tooltip": "Step the op back one objective. Lead only.",
+      "Icon": "imgs/action",
+      "PropertyInspectorPath": "ui/inspector.html",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/key", "Title": "Obj -" }]
+    },
+    {
+      "UUID": "com.thecodesaiyan.orghud.bed.pause",
+      "Name": "Bed Pause/Resume",
+      "Tooltip": "Pause or resume the op's music bed. Lead only.",
+      "Icon": "imgs/action",
+      "PropertyInspectorPath": "ui/inspector.html",
+      "Controllers": ["Keypad"],
+      "States": [
+        { "Image": "imgs/key", "Title": "Pause" },
+        { "Image": "imgs/key", "Title": "Resume" }
+      ]
+    },
+    {
+      "UUID": "com.thecodesaiyan.orghud.transport.next",
+      "Name": "Bed Next Track",
+      "Tooltip": "Skip to the next track on the bed. Lead only.",
+      "Icon": "imgs/action",
+      "PropertyInspectorPath": "ui/inspector.html",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/key", "Title": "Next" }]
+    },
+    {
+      "UUID": "com.thecodesaiyan.orghud.transport.prev",
+      "Name": "Bed Previous Track",
+      "Tooltip": "Go back a track on the bed. Lead only.",
+      "Icon": "imgs/action",
+      "PropertyInspectorPath": "ui/inspector.html",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/key", "Title": "Prev" }]
+    },
+    {
+      "UUID": "com.thecodesaiyan.orghud.clip",
+      "Name": "Soundboard Clip",
+      "Tooltip": "Fire a soundboard clip into the ready room. Lead only.",
+      "Icon": "imgs/action",
+      "PropertyInspectorPath": "ui/inspector.html",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/key", "Title": "Clip" }]
+    },
+    {
+      "UUID": "com.thecodesaiyan.orghud.quickaction",
+      "Name": "Quick Action",
+      "Tooltip": "Call something into the op's ready room — Downed, En route, On station. Any member on the op.",
+      "Icon": "imgs/action",
+      "PropertyInspectorPath": "ui/inspector.html",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/key", "Title": "Call" }]
+    },
+    {
+      "UUID": "com.thecodesaiyan.orghud.memberclip",
+      "Name": "Member Clip",
+      "Tooltip": "Fire a clip into the ready room. Any member on the op, subject to the lead's clip policy.",
+      "Icon": "imgs/action",
+      "PropertyInspectorPath": "ui/inspector.html",
+      "Controllers": ["Keypad"],
+      "States": [{ "Image": "imgs/key", "Title": "Clip" }]
+    },
+    {
+      "UUID": "com.thecodesaiyan.orghud.complete",
+      "Name": "Complete Op",
+      "Tooltip": "End the live op. Press once to arm, again within 5s to confirm.",
+      "Icon": "imgs/action",
+      "PropertyInspectorPath": "ui/inspector.html",
+      "Controllers": ["Keypad"],
+      "States": [
+        { "Image": "imgs/key", "Title": "Complete" },
+        { "Image": "imgs/key", "Title": "CONFIRM?" }
+      ]
+    },
+    {
+      "UUID": "com.thecodesaiyan.orghud.volume",
+      "Name": "Bed Volume",
+      "Tooltip": "Turn to set the op bed's volume. Lead only.",
+      "Icon": "imgs/action",
+      "PropertyInspectorPath": "ui/inspector.html",
+      "Controllers": ["Encoder"],
+      "Encoder": {
+        "layout": "$B1",
+        "TriggerDescription": {
+          "Rotate": "Set bed volume",
+          "Push": "Pause / resume"
+        }
+      },
+      "States": [{ "Image": "imgs/key", "Title": "Volume" }]
+    }
+  ]
+}

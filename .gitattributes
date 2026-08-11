@@ -1,0 +1,32 @@
+# Line endings are NOT cosmetic in this repo.
+#
+# `hud/src/main.rs` carries guards that slice literal JS out of `hud/ui/index.html` by searching
+# for markers like `const persist = ` … `;\n`. Git for Windows defaults to `core.autocrlf=true`, so
+# a checkout on Windows rewrites every LF to CRLF — the marker becomes `;\r\n`, the search misses,
+# and ten tests fail with "`const persist = ` must still contain `;`". The code is fine; the
+# working tree was rewritten underneath it.
+#
+# orgplatform never saw this because its CI is Linux-only. This repo builds on Windows — the
+# platform the client actually ships on — so it is the first place the fragility shows up.
+#
+# Forcing LF in the working tree on every platform makes checkouts deterministic and keeps them
+# byte-identical to what is stored.
+* text=auto eol=lf
+
+# Binary assets: never touched, never diffed as text.
+*.png  binary
+*.ico  binary
+*.icns binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ttf  binary
+*.otf  binary
+*.woff binary
+*.woff2 binary
+*.mp3  binary
+*.wav  binary
+*.ogg  binary
+*.exe  binary
+*.dll  binary
+*.msi  binary
