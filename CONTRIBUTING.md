@@ -1,4 +1,4 @@
-# Contributing to Org HUD
+# Contributing to StarPlatform HUD
 
 Thanks for looking. This is the public, member-facing overlay client; contributions from
 members and the wider community are welcome.

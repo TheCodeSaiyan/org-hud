@@ -1,4 +1,4 @@
-# Org HUD
+# StarPlatform HUD
 
 A non-invasive, in-game overlay for our Star Citizen org. It draws your org's own
 information — events, status, recognition — in a transparent, click-through window you can

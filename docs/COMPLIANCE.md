@@ -1,11 +1,11 @@
 # Compliance statement
 
-**Org HUD is non-invasive. It does not touch Star Citizen in any way.**
+**StarPlatform HUD is non-invasive. It does not touch Star Citizen in any way.**
 
 This is the whole point of the HUD being open source: you can read this repository and
 confirm every claim below for yourself.
 
-## What the Org HUD does NOT do
+## What the StarPlatform HUD does NOT do
 
 - **No process injection.** It never attaches to, hooks, or loads code into the game process.
 - **No memory reading.** It never reads or writes the game's memory.

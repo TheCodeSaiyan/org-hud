@@ -1,4 +1,4 @@
-# Org HUD — Stream Deck plugin
+# StarPlatform HUD — Stream Deck plugin
 
 Run a live op from an Elgato Stream Deck: check in, advance objectives, control the music bed, fire
 soundboard clips.
@@ -11,7 +11,7 @@ speaks is a private plugin↔Stream Deck channel — not a bus other application
 hardware cannot reach the HUD; the HUD has to offer somewhere to be reached.
 
 ```
-Stream Deck app  <--ws-->  this plugin  <--ws-->  Org HUD local API  --> member socket --> server
+Stream Deck app  <--ws-->  this plugin  <--ws-->  StarPlatform HUD local API  --> member socket --> server
                                                   (127.0.0.1:48291)
 ```
 
@@ -28,7 +28,7 @@ directly to the server would be a second credential sitting in a user-readable N
 2. Copy the **pairing key** shown there.
 3. **Install the plugin** — double-click `com.thecodesaiyan.starplatformhud.streamDeckPlugin`, or for
    development: `streamdeck link streamdeck/com.thecodesaiyan.starplatformhud.sdPlugin`
-4. Drag any Org HUD action onto a key, open its property inspector, and paste the pairing key. It is
+4. Drag any StarPlatform HUD action onto a key, open its property inspector, and paste the pairing key. It is
    stored once globally, so you only do this for the first key.
 
 To revoke: HUD → Settings → **Revoke**. That invalidates the key for **new** connections. A tool

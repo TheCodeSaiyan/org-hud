@@ -1,4 +1,4 @@
-# Org HUD — desktop overlay
+# StarPlatform HUD — desktop overlay
 
 A transparent, always-on-top, click-through in-game overlay for the org platform. Two layers:
 

@@ -1,6 +1,6 @@
 # Privacy
 
-What the Org HUD sends, and what it stores.
+What the StarPlatform HUD sends, and what it stores.
 
 ## What it sends
 
@@ -21,5 +21,5 @@ What the Org HUD sends, and what it stores.
 - No game data, no screenshots of the game, no system information beyond what the OS needs to
   draw a window.
 
-You can delete all local state by removing the Org HUD config directory; the path is shown in
+You can delete all local state by removing the StarPlatform HUD config directory; the path is shown in
 the app's About screen.

@@ -1,4 +1,4 @@
-// Org HUD — Stream Deck plugin.
+// StarPlatform HUD — Stream Deck plugin.
 //
 // ZERO dependencies and NO build step, on purpose. The obvious route is `@elgato/streamdeck` plus
 // TypeScript, npm and rollup, which would drop a whole second toolchain into an all-Rust workspace
@@ -8,7 +8,7 @@
 //
 // TWO sockets, and they are not alike:
 //
-//   Stream Deck  <-- ws -->  THIS  <-- ws -->  Org HUD local API  --> member socket --> server
+//   Stream Deck  <-- ws -->  THIS  <-- ws -->  StarPlatform HUD local API  --> member socket --> server
 //
 // The left one is opened FOR us: the Stream Deck app launches this process with -port/-pluginUUID/
 // -registerEvent/-info and we connect back and register. The right one is ours to open, and it is

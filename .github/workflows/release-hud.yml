@@ -52,7 +52,7 @@ jobs:
         with:
           projectPath: hud
           tagName: ${{ github.ref_name }}
-          releaseName: "Org HUD ${{ github.ref_name }}"
+          releaseName: "StarPlatform HUD ${{ github.ref_name }}"
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
