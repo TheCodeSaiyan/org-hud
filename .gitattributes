@@ -6,7 +6,7 @@
 # and ten tests fail with "`const persist = ` must still contain `;`". The code is fine; the
 # working tree was rewritten underneath it.
 #
-# orgplatform never saw this because its CI is Linux-only. This repo builds on Windows — the
+# starplatform never saw this because its CI is Linux-only. This repo builds on Windows — the
 # platform the client actually ships on — so it is the first place the fragility shows up.
 #
 # Forcing LF in the working tree on every platform makes checkouts deterministic and keeps them

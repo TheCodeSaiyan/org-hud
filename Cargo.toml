@@ -3,13 +3,13 @@
 # Step 5 of the platform plan: the docs-and-CI skeleton is now a real workspace holding the Tauri
 # desktop overlay (`hud`) and the wire contract it speaks (`hud-protocol`).
 #
-# `hud-protocol` is vendored here as a workspace member rather than pulled from orgplatform: that
+# `hud-protocol` is vendored here as a workspace member rather than pulled from starplatform: that
 # repo is PRIVATE, so a git dependency on it would make this workspace unbuildable for anyone
 # without access — which defeats the point of a public client. It is the ONLY part of the platform
 # permitted to live here, and it carries no secrets, no credentials and no org-internal rules (see
 # the invariants in `hud-protocol/src/lib.rs`).
 #
-# KEEP IN STEP WITH orgplatform: `hud-protocol` is a copy, so a `PROTOCOL_VERSION` bump or any wire
+# KEEP IN STEP WITH starplatform: `hud-protocol` is a copy, so a `PROTOCOL_VERSION` bump or any wire
 # change must land in both. The version is advisory — no peer refuses on mismatch — so drift is
 # silent and only shows up as a field the other side ignores.
 [workspace]
@@ -19,7 +19,7 @@ members = ["hud", "hud-protocol"]
 [workspace.package]
 edition = "2021"
 rust-version = "1.90"
-# MIT only — matches the LICENSE file at the repo root. (The extraction template in orgplatform's
+# MIT only — matches the LICENSE file at the repo root. (The extraction template in starplatform's
 # `scripts/extract-hud.ps1` emits "MIT OR Apache-2.0"; that is wrong for this repo and would
 # misdeclare the licence in published crate metadata.)
 license = "MIT"

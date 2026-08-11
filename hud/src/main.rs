@@ -1,4 +1,4 @@
-//! orgplatform desktop HUD — a transparent, always-on-top tray overlay with two layers:
+//! starplatform desktop HUD — a transparent, always-on-top tray overlay with two layers:
 //!
 //! * PUBLIC (always on): the org's live identity card, fed by the unauthenticated `/ws`.
 //! * MEMBER (opt-in): after logging in, an interactive panel of internal live data, pulled from the

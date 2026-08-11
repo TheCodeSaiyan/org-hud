@@ -1,6 +1,6 @@
 //! # hud-protocol
 //!
-//! The wire contract shared between the private `orgplatform` server and the public
+//! The wire contract shared between the private `starplatform` server and the public
 //! `org-hud` overlay client. This crate is the ONLY part of the platform the public
 //! repo is allowed to depend on.
 //!

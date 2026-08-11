@@ -26,7 +26,7 @@ jobs:
       # `--all-targets` compiles it, so the Linux runner needs the GTK/WebKit dev libs or the
       # build dies with "The system library `glib-2.0` ... was not found".
       #
-      # Kept in step with orgplatform's own ci.yml, which installs the same set for the same crate.
+      # Kept in step with starplatform's own ci.yml, which installs the same set for the same crate.
       - name: Install Tauri system dependencies (Linux only)
         if: runner.os == 'Linux'
         run: |

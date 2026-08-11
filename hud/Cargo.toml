@@ -1,4 +1,4 @@
-# orgplatform desktop HUD — the in-game overlay app.
+# starplatform desktop HUD — the in-game overlay app.
 #
 # INVARIANT (workspace rule): this crate depends ONLY on hud-protocol from the workspace; it never
 # touches `core` or `server`. It talks to the server purely over HTTP/WebSocket, so it stays
@@ -8,7 +8,7 @@ name = "hud"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
-description = "orgplatform desktop HUD — a transparent, always-on-top in-game overlay."
+description = "starplatform desktop HUD — a transparent, always-on-top in-game overlay."
 publish = false
 
 [build-dependencies]
