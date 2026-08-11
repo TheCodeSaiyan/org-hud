@@ -10,11 +10,31 @@ jobs:
   release:
     strategy:
       fail-fast: false
+      # Don't let one platform's failure cancel the others: a release that ships Windows but not
+      # Linux is far better than one that ships nothing.
+      fail-fast: false
       matrix:
         include:
           - { os: windows-latest, args: "" }
-          - { os: macos-latest,   args: "--target universal-apple-darwin" }
           - { os: ubuntu-latest,  args: "" }
+          # macOS is deliberately NOT built. It fails at compile time:
+          #
+          #   error[E0599]: no method named `transparent` found for struct `WebviewWindowBuilder`
+          #
+          # The HUD is a transparent, always-on-top overlay — that is what it IS — and Tauri gates
+          # transparent windows on macOS behind the `macos-private-api` feature, which also bars
+          # App Store distribution. Paying that to ship a build whose defining behaviours are
+          # `#[cfg(windows)]` anyway (click-through, the WH_KEYBOARD_LL toggle hook, the
+          # foreground-window auto-hide) is a bad trade, and orgplatform's own release workflow
+          # reaches the same conclusion from the other direction ("nobody runs the HUD on a Mac").
+          #
+          # Linux is kept because it BUILDS cleanly and costs nothing on a public repo's free
+          # runners — the same "behaviours compiled out" caveat applies to it, but it needs no
+          # private-API opt-in to produce an artifact.
+          #
+          # Re-adding macOS is a one-line matrix edit here, plus `macOSPrivateApi: true` in
+          # hud/tauri.conf.json — decide about the App Store first.
+          # - { os: macos-latest, args: "--target universal-apple-darwin" }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
