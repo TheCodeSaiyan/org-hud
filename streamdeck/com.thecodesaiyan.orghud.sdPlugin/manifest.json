@@ -3,7 +3,7 @@
   "Name": "Org HUD",
   "Version": "1.0.0.0",
   "Author": "TheCodeSaiyan",
-  "URL": "https://github.com/TheCodeSaiyan/orgplatform",
+  "URL": "https://github.com/TheCodeSaiyan/starplatform",
   "Description": "Run a live op from your Stream Deck: check in, advance objectives, control the music bed and fire soundboard clips. Requires the Org HUD desktop app with its local control API enabled.",
   "Category": "Org HUD",
   "Icon": "imgs/plugin",

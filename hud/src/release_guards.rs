@@ -85,7 +85,7 @@ fn windows_bundles_both_installers_and_nsis_owns_the_updater() {
 ///
 ///   2. **The endpoint must not point at a PRIVATE repo.** Release assets on a private repo require
 ///      an authenticated request and the Tauri updater sends none, so such an endpoint 404s
-///      forever — and a failed update check is not user-visible. `orgplatform` is private; the
+///      forever — and a failed update check is not user-visible. `starplatform` is private; the
 ///      endpoint must therefore name a public host (today: the `org-hud` repo of Option 3 in
 ///      `docs/HUD-RELEASE.md`).
 ///
@@ -110,11 +110,19 @@ fn updater_signing_and_endpoint_agree() {
     // Only meaningful once a real key is in play — with the placeholder the updater is inert and
     // the endpoint cannot mislead anyone.
     if !placeholder {
-        assert!(
-            !tauri_conf.contains("TheCodeSaiyan/orgplatform/releases"),
-            "the updater endpoint points at `orgplatform`, which is PRIVATE. Release assets there \
-             need an authenticated request and the updater sends none, so every update check would \
-             404 — silently. Point it at a public host (docs/HUD-RELEASE.md, Option 3)."
-        );
+        // BOTH names are checked. The private repo was renamed orgplatform -> starplatform, and
+        // GitHub redirects the old path permanently — so an endpoint still spelled `orgplatform`
+        // resolves to the same private repo and 404s for the updater exactly as before. Dropping
+        // the old spelling would leave a guard that cannot fail, which reads as coverage while
+        // protecting nothing.
+        for private_repo in ["TheCodeSaiyan/starplatform", "TheCodeSaiyan/orgplatform"] {
+            assert!(
+                !tauri_conf.contains(&format!("{private_repo}/releases")),
+                "the updater endpoint points at `{private_repo}`, which is PRIVATE (the old name \
+                 redirects to the same repo). Release assets there need an authenticated request \
+                 and the updater sends none, so every update check would 404 — silently. Point it \
+                 at a public host (docs/HUD-RELEASE.md, Option 3)."
+            );
+        }
     }
 }

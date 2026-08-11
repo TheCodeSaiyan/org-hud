@@ -25,7 +25,7 @@ jobs:
           # transparent windows on macOS behind the `macos-private-api` feature, which also bars
           # App Store distribution. Paying that to ship a build whose defining behaviours are
           # `#[cfg(windows)]` anyway (click-through, the WH_KEYBOARD_LL toggle hook, the
-          # foreground-window auto-hide) is a bad trade, and orgplatform's own release workflow
+          # foreground-window auto-hide) is a bad trade, and starplatform's own release workflow
           # reaches the same conclusion from the other direction ("nobody runs the HUD on a Mac").
           #
           # Linux is kept because it BUILDS cleanly and costs nothing on a public repo's free

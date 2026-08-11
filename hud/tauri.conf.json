@@ -24,7 +24,7 @@
       "icons/icon.png",
       "icons/icon.ico"
     ],
-    "shortDescription": "orgplatform desktop HUD",
+    "shortDescription": "starplatform desktop HUD",
     "longDescription": "A transparent, always-on-top in-game overlay for the org platform: the live public identity card plus an opt-in member panel."
   },
   "plugins": {
